@@ -1,0 +1,14 @@
+# Orac Project-Level Configuration
+# ---------------------------------
+# These settings apply to all prompts by default.
+# They can be overridden in individual prompt YAML files.
+
+# Default model for all prompts unless specified otherwise.
+model_name: "gemini-1.5-flash"
+
+# Default generation parameters.
+generation_config:
+    temperature: 0.7
+    max_tokens: 2048
+    # top_p: 1.0
+    # top_k: 40

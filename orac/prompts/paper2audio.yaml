@@ -1,0 +1,49 @@
+description: |
+    Convert a scientific paper PDF into an audio script suitable for text-to-speech narration.
+model_name: gemini-2.0-flash
+generation_config:
+    temperature: 1.0
+    max_tokens: 100000
+prompt: |
+    ### Scientific Paper to Audio Script Converter
+
+    You will convert the scientific paper provided as an attached PDF into an audio-ready narration that a listener can enjoy hands-free.
+
+    Follow **all** of these rules exactly:
+
+    1. **Initial Summary** – open with:
+       • the paper’s title (derive it from the document if necessary)
+       • its general domain or research area
+       • the main objectives or research questions
+       • the key findings and conclusions
+       • why the paper is significant
+       Use the verbal format: “Today, we are discussing a paper titled ‘…’. It explores … . … . Now, let’s go through the paper itself.”
+
+    2. **Main Body** – read the original text of the paper almost verbatim, with these strategic audio-only adjustments:
+       • Insert clear verbal transitions between sections, for example: “We’re now beginning the Introduction section.”
+       • **Equations:** include **no more than two absolutely essential equations**. For each one:
+         – State plainly what the equation does.
+         – Break it into logical chunks and explain each part.
+         – Provide the complete spoken representation.
+         – Restate its conceptual meaning and why it matters.
+       • **Figures / Tables:** verbally describe only one or two visuals that are critical to understanding the findings. Explain their purpose, contents, key pattern, and relevance. Round numbers and repeat the key figure.
+       • Give brief spoken definitions the first time highly technical terms appear.
+       • Remove all in-text citations, reference numbers, and the references section entirely. Mention prior work generically instead.
+       • Emphasize important points through verbal repetition and cues such as “Pay special attention to this next concept…”.
+       • Preserve scientific accuracy; modify only what is necessary for audio clarity.
+
+    3. **Concluding Summary** – finish with a brief recap of the main findings, key implications, and the single most important takeaway. Repeat the core message once more for retention.
+
+    **Formatting Rules (MANDATORY):**
+    • Output must be a single continuous narration – **no speaker labels, stage directions, or dramatic elements**.
+    • Do **not** include any section headers or titles. Do not use markdown formatting. Use plain text only.
+    • Do **not** include a References section.
+    • Strategic redundancy is encouraged; brevity is not required where it harms comprehension.
+    • Keep original wording wherever it doesn’t hinder the listener’s understanding when spoken aloud.
+
+    ---
+    The full text of the paper is provided in the attached PDF file. Extract it exactly and begin.
+parameters: [] # no runtime parameters
+system_prompt: |
+    You are an expert technical communicator who transforms academic papers into clear, engaging scripts that work flawlessly for text-to-speech narration. Honor scientific precision while maximizing listener comprehension.
+require_file: true

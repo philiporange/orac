@@ -1,0 +1,19 @@
+prompt: |
+    Create a simple recipe for ${dish}. Return the recipe in JSON format with the following structure:
+    {
+        "title": "Recipe Title",
+        "ingredients": ["ingredient1", "ingredient2", ...],
+        "steps": ["step1", "step2", ...]
+    }
+parameters:
+    - name: dish
+      default: pancakes
+
+response_mime_type: application/json
+response_schema:
+    type: object
+    required: [title, ingredients, steps]
+    properties:
+        title: { type: string }
+        ingredients: { type: array, items: { type: string } }
+        steps: { type: array, items: { type: string } }
