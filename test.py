@@ -33,13 +33,16 @@ CLI_PATH = Path(__file__).parent / "orac" / "cli.py"
 
 
 def run_command(
-    cmd: list[str], *, check_success: bool = True
+    cmd: list[str], *, check_success: bool = True, env: dict = None
 ) -> subprocess.CompletedProcess:
     """Run *cmd* in a subprocess and return the CompletedProcess object."""
     print(f"\n$ {' '.join(cmd)}")
+    # Use provided env or current environment
+    if env is None:
+        env = os.environ.copy()
     try:
         result = subprocess.run(
-            cmd, text=True, capture_output=True, check=check_success
+            cmd, text=True, capture_output=True, check=check_success, env=env
         )
         return result
     except subprocess.CalledProcessError as e:
@@ -53,7 +56,7 @@ def run_command(
 # --------------------------------------------------------------------------- #
 def test_basic_recipe_prompt() -> None:
     """Default-parameter execution for a prompt with a default field."""
-    out = run_command(["python", str(CLI_PATH), "recipe"])
+    out = run_command(["python", "-m", "orac.cli", str(CLI_PATH), "recipe"])
     assert out.returncode == 0
     assert out.stdout.strip(), "recipe prompt produced no output"
     assert "pancake" in out.stdout.lower(), "should mention default dish 'pancakes'"
@@ -62,7 +65,7 @@ def test_basic_recipe_prompt() -> None:
 
 def test_capital_with_parameter() -> None:
     """Explicit parameter passing (`--country`)."""
-    out = run_command(["python", str(CLI_PATH), "capital", "--country", "Japan"])
+    out = run_command(["python", "-m", "orac.cli",str(CLI_PATH), "capital", "--country", "Japan"])
     assert out.returncode == 0
     assert out.stdout.strip(), "capital prompt produced no output"
     assert "tokyo" in out.stdout.lower(), "answer should mention Tokyo"
@@ -76,7 +79,7 @@ def test_output_redirection() -> None:
     try:
         out = run_command(
             [
-                "python",
+                "python", "-m", "orac.cli",
                 str(CLI_PATH),
                 "recipe",
                 "--dish",
@@ -96,7 +99,7 @@ def test_output_redirection() -> None:
 
 def test_info_mode() -> None:
     """`--info` must print parameter metadata and exit without error."""
-    out = run_command(["python", str(CLI_PATH), "capital", "--info"])
+    out = run_command(["python", "-m", "orac.cli", str(CLI_PATH), "capital", "--info"])
     assert out.returncode == 0
     assert "Parameters" in out.stdout
     assert "country" in out.stdout
@@ -105,7 +108,7 @@ def test_info_mode() -> None:
 
 def test_verbose_mode() -> None:
     """CLI must still print the model answer in verbose mode."""
-    out = run_command(["python", str(CLI_PATH), "recipe", "--verbose"])
+    out = run_command(["python", "-m", "orac.cli", str(CLI_PATH), "recipe", "--verbose"])
     assert out.returncode == 0
     assert out.stdout.strip(), "no LLM answer in verbose mode"
     print("✓ --verbose mode")
@@ -114,7 +117,7 @@ def test_verbose_mode() -> None:
 def test_json_and_schema_output() -> None:
     """`--json-output` and `--response-schema`."""
     # --json-output
-    out = run_command(["python", str(CLI_PATH), "recipe", "--json-output"])
+    out = run_command(["python", "-m", "orac.cli", str(CLI_PATH), "recipe", "--json-output"])
     obj = json.loads(out.stdout)
     assert isinstance(obj, dict), "--json-output must return a JSON object"
     print("✓ basic --json-output")
@@ -131,7 +134,7 @@ def test_json_and_schema_output() -> None:
     try:
         out = run_command(
             [
-                "python",
+                "python", "-m", "orac.cli",
                 str(CLI_PATH),
                 "capital",
                 "--country",
@@ -155,7 +158,7 @@ def test_generation_config_and_model_override() -> None:
     override = '{"temperature": 0.1, "max_tokens": 20}'
     out = run_command(
         [
-            "python",
+            "python", "-m", "orac.cli",
             str(CLI_PATH),
             "capital",
             "--country",
@@ -184,7 +187,7 @@ def test_local_file_attachment() -> None:
     try:
         out = run_command(
             [
-                "python",
+                "python", "-m", "orac.cli",
                 str(CLI_PATH),
                 "paper2audio",
                 "--file",
@@ -215,7 +218,7 @@ def test_require_file_validation() -> None:
     )
     out = run_command(
         [
-            "python",
+            "python", "-m", "orac.cli",
             str(CLI_PATH),
             "needs_file",
             "--prompts-dir",
@@ -231,7 +234,7 @@ def test_require_file_validation() -> None:
 def test_unknown_prompt_error() -> None:
     """The CLI must exit non-zero and complain if the prompt is missing."""
     out = run_command(
-        ["python", str(CLI_PATH), "does_not_exist"],
+        ["python", "-m", "orac.cli", str(CLI_PATH), "does_not_exist"],
         check_success=False,
     )
     assert out.returncode != 0
@@ -241,25 +244,21 @@ def test_unknown_prompt_error() -> None:
 
 def test_provider_requirement() -> None:
     """The CLI must exit non-zero if no provider is specified."""
-    # Save current environment
-    original_provider = os.environ.get("ORAC_LLM_PROVIDER")
+    # Create a clean environment without ORAC_LLM_PROVIDER
+    clean_env = os.environ.copy()
+    clean_env.pop("ORAC_LLM_PROVIDER", None)
+    clean_env["ORAC_DISABLE_DOTENV"] = "1"  # Disable .env loading
+    clean_env["PYTHONPATH"] = str(Path(__file__).parent)
 
-    try:
-        # Remove provider environment variable
-        if "ORAC_LLM_PROVIDER" in os.environ:
-            del os.environ["ORAC_LLM_PROVIDER"]
+    out = run_command(
+        ["python", "-m", "orac.cli", "capital", "--country", "France"],
+        check_success=False,
+        env=clean_env
+    )
 
-        out = run_command(
-            ["python", str(CLI_PATH), "capital", "--country", "France"],
-            check_success=False,
-        )
-        assert out.returncode != 0
-        assert "select an llm provider" in out.stderr.lower()
-        print("✓ provider requirement enforcement")
-    finally:
-        # Restore environment
-        if original_provider:
-            os.environ["ORAC_LLM_PROVIDER"] = original_provider
+    assert out.returncode != 0
+    assert "select an llm provider" in out.stderr.lower()
+    print("✓ provider requirement enforcement")
 
 
 # --------------------------------------------------------------------------- #
@@ -279,7 +278,7 @@ def test_convert_cli_value_helper() -> None:
 
 def test_parameter_coercion_internal() -> None:
     """Quick sanity check on `LLMWrapper._resolve_parameters()` using a temp prompt."""
-    from orac.llm import LLMWrapper
+    from orac.orac import Orac
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="orac_params_"))
     yaml_path = tmp_dir / "types.yaml"
@@ -299,7 +298,7 @@ def test_parameter_coercion_internal() -> None:
             """
         )
     )
-    wrapper = LLMWrapper("types", prompts_dir=str(tmp_dir))
+    wrapper = Orac("types", prompts_dir=str(tmp_dir))
     params = wrapper._resolve_parameters(
         flag="yes", count="7", ratio="2.5", items="x, y ,z "
     )
@@ -314,7 +313,7 @@ def test_parameter_coercion_internal() -> None:
 
 def test_config_override_hierarchy() -> None:
     """Verify the config precedence: runtime > prompt.yaml > base_config.yaml"""
-    from orac.llm import LLMWrapper
+    from orac.orac import Orac
 
     # 1. Create temporary config and prompt files
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -355,7 +354,7 @@ def test_config_override_hierarchy() -> None:
         # --- TEST CASES ---
 
         # Case A: Prompt overrides base config
-        wrapper_a = LLMWrapper(
+        wrapper_a = Orac(
             "override_prompt",
             prompts_dir=str(prompts_dir),
             base_config_file=str(base_config_path),
@@ -367,7 +366,7 @@ def test_config_override_hierarchy() -> None:
         )  # Inherited
 
         # Case B: Runtime args override everything
-        wrapper_b = LLMWrapper(
+        wrapper_b = Orac(
             "override_prompt",
             prompts_dir=str(prompts_dir),
             base_config_file=str(base_config_path),
@@ -381,7 +380,7 @@ def test_config_override_hierarchy() -> None:
         )  # Base config is merged
 
         # Case C: Simple prompt inherits fully from base config
-        wrapper_c = LLMWrapper(
+        wrapper_c = Orac(
             "simple_prompt",
             prompts_dir=str(prompts_dir),
             base_config_file=str(base_config_path),
@@ -408,8 +407,15 @@ def main() -> None:
     os.chdir(Path(__file__).parent)
 
     try:
-        # CLI-level (live LLM) tests
+        # Run the provider requirement test first (without provider set)
         test_provider_requirement()
+
+        # Then set up provider for remaining tests
+        os.environ["ORAC_LLM_PROVIDER"] = "google"
+        if not os.environ.get("GOOGLE_API_KEY"):
+            print("⚠️  Warning: GOOGLE_API_KEY not set - tests may fail")
+
+        # CLI-level (live LLM) tests
         test_basic_recipe_prompt()
         test_capital_with_parameter()
         test_output_redirection()

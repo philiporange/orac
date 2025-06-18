@@ -50,7 +50,7 @@ Orac supports configuration through environment variables. You can either set th
    # API Keys
    GOOGLE_API_KEY=your_google_api_key_here
    OPENAI_API_KEY=your_openai_api_key_here
-   
+
    # Configuration overrides (optional)
    ORAC_DEFAULT_MODEL_NAME=gemini-2.0-flash
    ORAC_LOG_FILE=./llm.log
@@ -120,7 +120,7 @@ Orac uses a layered configuration system, allowing for flexible and powerful con
 
 2.  **Prompt Configuration (`prompts/your_prompt.yaml`)**: Any setting defined in a specific prompt's YAML file will override the base configuration. This is the primary way to customize a single task. For example, you can set a lower `temperature` for a factual prompt or a different `model_name` for a complex one.
 
-3.  **Runtime Overrides (CLI / Python API)**: Settings provided directly at runtime, such as using the `--model-name` flag in the CLI or passing the `generation_config` dictionary to the `LLMWrapper` constructor, will always take the highest precedence, overriding all other configurations.
+3.  **Runtime Overrides (CLI / Python API)**: Settings provided directly at runtime, such as using the `--model-name` flag in the CLI or passing the `generation_config` dictionary to the `Orac` constructor, will always take the highest precedence, overriding all other configurations.
 
 #### Example Override
 
@@ -164,9 +164,9 @@ parameters:
 ### 2. Run from Python
 
 ```python
-from orac import LLMWrapper
+from orac import Orac
 
-llm = LLMWrapper("capital")
+llm = Orac("capital")
 print(llm.completion())  # Defaults to France
 print(llm.completion(country="Japan"))
 ```
@@ -185,7 +185,7 @@ orac capital --info
 ```bash
 # Override model and config
 orac capital --country "Canada" \
-  --model-name "gemini-2.0-flash" \
+  --model-name "gemini-2.5-flash" \
   --generation-config '{"temperature": 0.4}'
 
 # Structured JSON response

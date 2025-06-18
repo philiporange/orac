@@ -120,7 +120,7 @@ def _download_remote_file(url: str) -> str:
 # --------------------------------------------------------------------------- #
 # LLMWrapper                                                                  #
 # --------------------------------------------------------------------------- #
-class LLMWrapper:
+class Orac:
     """
     High-level helper that:
       • loads YAML prompt specs,

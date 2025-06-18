@@ -11,17 +11,26 @@ from pathlib import Path
 
 from orac.logger import configure_console_logging
 from orac.config import Config
-from orac.llm import LLMWrapper
+from orac.orac import Orac
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Allow: python -m orac.cli /path/to/cli.py <prompt> ...
+# Strip the redundant script-path so that <prompt> is argv[1].
+# ──────────────────────────────────────────────────────────────────────────────
+if len(sys.argv) > 1 and sys.argv[1].endswith("cli.py"):
+    sys.argv.pop(1)
 
 # --------------------------------------------------------------------------- #
 # Load environment variables (.env)                                           #
 # --------------------------------------------------------------------------- #
-# 1. Current working directory and parents
-load_dotenv(find_dotenv(usecwd=True), override=False)
-# 2. Project root
-load_dotenv(Config.PROJECT_ROOT / ".env", override=False)
-# 3. User’s home directory
-load_dotenv(Path.home() / ".env", override=False)
+if not os.getenv("ORAC_DISABLE_DOTENV"):
+    # 1. Current working directory and parents
+    load_dotenv(find_dotenv(usecwd=True), override=False)
+    # 2. Project root
+    load_dotenv(Config.PROJECT_ROOT / ".env", override=False)
+    # 3. User's home directory
+    load_dotenv(Path.home() / ".env", override=False)
 
 
 # --------------------------------------------------------------------------- #
@@ -391,8 +400,8 @@ def main():
 
     # Instantiate wrapper and call
     try:
-        logger.debug("Creating LLMWrapper instance")
-        wrapper = LLMWrapper(
+        logger.debug("Creating Orac instance")
+        wrapper = Orac(
             prompt_name=args.prompt,
             prompts_dir=args.prompts_dir,
             model_name=args.model_name,

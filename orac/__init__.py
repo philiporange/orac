@@ -1,3 +1,3 @@
-from .llm import LLMWrapper
+from .orac import Orac
 
-__all__ = ["LLMWrapper"]
+__all__ = ["Orac"]
