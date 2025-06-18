@@ -144,8 +144,19 @@ class Orac:
         provider: Optional[str | Provider] = None,
         base_url: Optional[str] = None,
     ):
-        self.prompt_name = prompt_name
-        self.prompts_root_dir = prompts_dir or DEFAULT_PROMPTS_DIR
+        # Detect “direct file” mode (prompt_name points to a real .yaml file)
+        pn_path = Path(prompt_name)
+        if pn_path.suffix.lower() in {".yaml", ".yml"}:
+            if not pn_path.is_file():
+                raise FileNotFoundError(f"Prompt YAML file not found: {pn_path}")
+            self.yaml_file_path = str(pn_path.expanduser().resolve())
+            self.prompt_name = pn_path.stem
+            self.prompts_root_dir = str(pn_path.parent)
+        else:
+            self.prompt_name = prompt_name
+            self.prompts_root_dir = prompts_dir or DEFAULT_PROMPTS_DIR
+            self.yaml_file_path = None  # resolved later
+
         self.verbose = verbose
         self.files = files or []
         self.file_urls = file_urls or []
@@ -169,8 +180,8 @@ class Orac:
             )
 
         logger.debug(
-            f"Initialising LLMWrapper for prompt: {prompt_name} "
-            f"with provider: {self.provider.value}"
+            f"Initialising Orac for prompt: {self.prompt_name} "
+            f"(provider: {self.provider.value})"
         )
 
         # 1. Load base config
@@ -178,9 +189,10 @@ class Orac:
         base_config = self._load_yaml_file(config_path, silent_not_found=True)
 
         # 2. Load prompt-specific config
-        self.yaml_file_path = os.path.join(
-            self.prompts_root_dir, f"{self.prompt_name}.yaml"
-        )
+        if self.yaml_file_path is None:
+            self.yaml_file_path = os.path.join(
+                self.prompts_root_dir, f"{self.prompt_name}.yaml"
+            )
         prompt_config = self._load_yaml_file(self.yaml_file_path)
         self.yaml_base_dir = os.path.dirname(os.path.abspath(self.yaml_file_path))
 

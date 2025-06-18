@@ -37,17 +37,25 @@ if not os.getenv("ORAC_DISABLE_DOTENV"):
 # Helper functions                                                            #
 # --------------------------------------------------------------------------- #
 def load_prompt_spec(prompts_dir: str, prompt_name: str) -> dict:
-    path = os.path.join(prompts_dir, f"{prompt_name}.yaml")
+    """
+    Return the YAML mapping for *prompt_name*.
+
+    *prompt_name* can be either:
+      • a bare name (searched in *prompts_dir*), or
+      • a direct path to a *.yaml / *.yml* file.
+    """
+    if prompt_name.endswith((".yaml", ".yml")) and os.path.isfile(prompt_name):
+        path = prompt_name
+    else:
+        path = os.path.join(prompts_dir, f"{prompt_name}.yaml")
+
     if not os.path.isfile(path):
-        logger.error(f"Prompt '{prompt_name}' not found in '{prompts_dir}'")
-        print(
-            f"Error: Prompt '{prompt_name}' not found in '{prompts_dir}'",
-            file=sys.stderr,
-        )
+        logger.error(f"Prompt '{prompt_name}' not found.")
+        print(f"Error: Prompt '{prompt_name}' not found.", file=sys.stderr)
         sys.exit(1)
 
     logger.debug(f"Loading prompt spec from: {path}")
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     if not isinstance(data, dict):

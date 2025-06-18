@@ -65,7 +65,9 @@ def test_basic_recipe_prompt() -> None:
 
 def test_capital_with_parameter() -> None:
     """Explicit parameter passing (`--country`)."""
-    out = run_command(["python", "-m", "orac.cli",str(CLI_PATH), "capital", "--country", "Japan"])
+    out = run_command(
+        ["python", "-m", "orac.cli", str(CLI_PATH), "capital", "--country", "Japan"]
+    )
     assert out.returncode == 0
     assert out.stdout.strip(), "capital prompt produced no output"
     assert "tokyo" in out.stdout.lower(), "answer should mention Tokyo"
@@ -79,7 +81,9 @@ def test_output_redirection() -> None:
     try:
         out = run_command(
             [
-                "python", "-m", "orac.cli",
+                "python",
+                "-m",
+                "orac.cli",
                 str(CLI_PATH),
                 "recipe",
                 "--dish",
@@ -108,7 +112,9 @@ def test_info_mode() -> None:
 
 def test_verbose_mode() -> None:
     """CLI must still print the model answer in verbose mode."""
-    out = run_command(["python", "-m", "orac.cli", str(CLI_PATH), "recipe", "--verbose"])
+    out = run_command(
+        ["python", "-m", "orac.cli", str(CLI_PATH), "recipe", "--verbose"]
+    )
     assert out.returncode == 0
     assert out.stdout.strip(), "no LLM answer in verbose mode"
     print("✓ --verbose mode")
@@ -117,7 +123,9 @@ def test_verbose_mode() -> None:
 def test_json_and_schema_output() -> None:
     """`--json-output` and `--response-schema`."""
     # --json-output
-    out = run_command(["python", "-m", "orac.cli", str(CLI_PATH), "recipe", "--json-output"])
+    out = run_command(
+        ["python", "-m", "orac.cli", str(CLI_PATH), "recipe", "--json-output"]
+    )
     obj = json.loads(out.stdout)
     assert isinstance(obj, dict), "--json-output must return a JSON object"
     print("✓ basic --json-output")
@@ -134,7 +142,9 @@ def test_json_and_schema_output() -> None:
     try:
         out = run_command(
             [
-                "python", "-m", "orac.cli",
+                "python",
+                "-m",
+                "orac.cli",
                 str(CLI_PATH),
                 "capital",
                 "--country",
@@ -158,7 +168,9 @@ def test_generation_config_and_model_override() -> None:
     override = '{"temperature": 0.1, "max_tokens": 20}'
     out = run_command(
         [
-            "python", "-m", "orac.cli",
+            "python",
+            "-m",
+            "orac.cli",
             str(CLI_PATH),
             "capital",
             "--country",
@@ -187,7 +199,9 @@ def test_local_file_attachment() -> None:
     try:
         out = run_command(
             [
-                "python", "-m", "orac.cli",
+                "python",
+                "-m",
+                "orac.cli",
                 str(CLI_PATH),
                 "paper2audio",
                 "--file",
@@ -218,7 +232,9 @@ def test_require_file_validation() -> None:
     )
     out = run_command(
         [
-            "python", "-m", "orac.cli",
+            "python",
+            "-m",
+            "orac.cli",
             str(CLI_PATH),
             "needs_file",
             "--prompts-dir",
@@ -253,7 +269,7 @@ def test_provider_requirement() -> None:
     out = run_command(
         ["python", "-m", "orac.cli", "capital", "--country", "France"],
         check_success=False,
-        env=clean_env
+        env=clean_env,
     )
 
     assert out.returncode != 0
@@ -390,6 +406,37 @@ def test_config_override_hierarchy() -> None:
 
     print("✓ config override hierarchy")
 
+def test_direct_path_loading() -> None:
+    """
+    Pass an *absolute* YAML file path to Orac() and ensure the prompt is
+    loaded without needing --prompts-dir or copying into prompts/.
+
+    This stays fully offline – no LLM call – so we pass a dummy provider.
+    """
+    from orac.orac import Orac
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yaml_path = Path(tmpdir) / "direct_prompt.yaml"
+        yaml_path.write_text(
+            dedent(
+                """
+                prompt: "Echo ${word}"
+                parameters:
+                  - name: word
+                    default: test
+                """
+            )
+        )
+
+        wrapper = Orac(str(yaml_path), provider="google")  # provider required
+        # core invariants
+        assert wrapper.prompt_name == "direct_prompt"
+        assert Path(wrapper.yaml_file_path) == yaml_path
+        assert Path(wrapper.prompts_root_dir) == Path(tmpdir)
+        # parameter resolution should pick up the default
+        assert wrapper._resolve_parameters() == {"word": "test"}
+
+    print("✓ direct YAML path loading")
 
 # --------------------------------------------------------------------------- #
 # Main entry point                                                            #
@@ -431,6 +478,7 @@ def main() -> None:
         test_convert_cli_value_helper()
         test_parameter_coercion_internal()
         test_config_override_hierarchy()
+        test_direct_path_loading()
 
         print("\n🎉  All tests passed!")
     except AssertionError as e:

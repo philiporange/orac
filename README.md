@@ -178,6 +178,7 @@ orac capital
 orac capital --country Japan
 orac capital --verbose
 orac capital --info
+orac ./a/b/ad_hoc_task.yaml --some-param foo
 ```
 
 ### 4. Advanced examples
