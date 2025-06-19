@@ -438,6 +438,103 @@ def test_direct_path_loading() -> None:
 
     print("✓ direct YAML path loading")
 
+
+def test_completion_as_json_method() -> None:
+    """Test the completion_as_json method with recipe prompt (returns JSON)."""
+    from orac.orac import Orac
+    
+    recipe = Orac("recipe", provider="google")
+    result = recipe.completion_as_json(dish="cookies")
+    
+    # Should return a dict (parsed JSON)
+    assert isinstance(result, dict)
+    assert "title" in result
+    assert "ingredients" in result
+    assert "steps" in result
+    assert isinstance(result["ingredients"], list)
+    assert isinstance(result["steps"], list)
+    
+    print("✓ completion_as_json method")
+
+
+def test_completion_as_json_with_text_prompt() -> None:
+    """Test completion_as_json method fails with text-only prompt."""
+    from orac.orac import Orac
+    import json
+    
+    capital = Orac("capital", provider="google")
+    
+    # Should raise JSONDecodeError since capital returns plain text
+    try:
+        capital.completion_as_json(country="France")
+        assert False, "Expected JSONDecodeError but method succeeded"
+    except json.JSONDecodeError:
+        # This is expected
+        pass
+    
+    print("✓ completion_as_json error handling")
+
+
+def test_callable_interface_auto_detection() -> None:
+    """Test __call__ method with automatic JSON detection."""
+    from orac.orac import Orac
+    
+    # Test with JSON-returning prompt
+    recipe = Orac("recipe", provider="google")
+    result = recipe(dish="pancakes")
+    
+    # Should auto-detect and return dict
+    assert isinstance(result, dict)
+    assert "title" in result
+    
+    # Test with text-returning prompt  
+    capital = Orac("capital", provider="google")
+    result = capital(country="Japan")
+    
+    # Should return string
+    assert isinstance(result, str)
+    assert result.strip()  # Should have content
+    
+    print("✓ callable interface auto-detection")
+
+
+def test_callable_interface_force_json() -> None:
+    """Test __call__ method with force_json parameter."""
+    from orac.orac import Orac
+    
+    # Test force_json=True with JSON prompt (should succeed)
+    recipe = Orac("recipe", provider="google")
+    result = recipe(dish="cookies", force_json=True)
+    assert isinstance(result, dict)
+    
+    # Test force_json=True with text prompt (should fail)
+    capital = Orac("capital", provider="google") 
+    try:
+        capital(country="France", force_json=True)
+        assert False, "Expected ValueError but method succeeded"
+    except ValueError as e:
+        assert "not valid JSON" in str(e)
+    
+    print("✓ callable interface force_json parameter")
+
+
+def test_callable_interface_parameters() -> None:
+    """Test that __call__ method accepts all completion parameters."""
+    from orac.orac import Orac
+    
+    # Test with various parameters
+    recipe = Orac("recipe", provider="google")
+    result = recipe(
+        dish="tacos",
+        generation_config={"temperature": 0.1},
+        model_name="gemini-2.0-flash-001"
+    )
+    
+    assert isinstance(result, dict)
+    assert "title" in result
+    
+    print("✓ callable interface parameter passing")
+
 # --------------------------------------------------------------------------- #
 # Main entry point                                                            #
 # --------------------------------------------------------------------------- #
@@ -479,6 +576,13 @@ def main() -> None:
         test_parameter_coercion_internal()
         test_config_override_hierarchy()
         test_direct_path_loading()
+
+        # New method tests
+        test_completion_as_json_method()
+        test_completion_as_json_with_text_prompt()
+        test_callable_interface_auto_detection()
+        test_callable_interface_force_json()
+        test_callable_interface_parameters()
 
         print("\n🎉  All tests passed!")
     except AssertionError as e:

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import glob
+import json
 import yaml
 import urllib.request
 from urllib.parse import urlparse
@@ -448,6 +449,66 @@ class Orac:
             system_prompt=system_prompt,
             **call_kwargs,
         )
+
+    def completion_as_json(
+        self,
+        message_history: Optional[List[Dict[str, Any]]] = None,
+        model_name: Optional[str] = None,
+        api_key: Optional[str] = None,
+        generation_config: Optional[Dict[str, Any]] = None,
+        file_urls: Optional[List[str]] = None,
+        **kwargs_params,
+    ) -> dict:
+        """Returns parsed JSON, raises exception if not valid JSON"""
+        result = self.completion(
+            message_history=message_history,
+            model_name=model_name,
+            api_key=api_key,
+            generation_config=generation_config,
+            file_urls=file_urls,
+            **kwargs_params,
+        )
+        return json.loads(result)
+
+    def __call__(
+        self,
+        message_history: Optional[List[Dict[str, Any]]] = None,
+        model_name: Optional[str] = None,
+        api_key: Optional[str] = None,
+        generation_config: Optional[Dict[str, Any]] = None,
+        file_urls: Optional[List[str]] = None,
+        force_json: bool = False,
+        **kwargs_params,
+    ) -> str | dict:
+        """
+        Sophisticated wrapper around completion that automatically detects and parses JSON responses.
+        
+        Args:
+            force_json: If True, raises an error if response isn't valid JSON
+            **kwargs: All other arguments passed to completion()
+            
+        Returns:
+            dict if response is valid JSON, str otherwise
+            
+        Raises:
+            ValueError: If force_json=True and response is not valid JSON
+        """
+        result = self.completion(
+            message_history=message_history,
+            model_name=model_name,
+            api_key=api_key,
+            generation_config=generation_config,
+            file_urls=file_urls,
+            **kwargs_params,
+        )
+        
+        # Try to parse as JSON
+        try:
+            return json.loads(result)
+        except json.JSONDecodeError:
+            if force_json:
+                raise ValueError(f"Response is not valid JSON: {result}")
+            return result
 
     # ---------------------- Introspection helpers ----------------------- #
     def get_parameter_info(self) -> List[Dict[str, Any]]:

@@ -166,9 +166,24 @@ parameters:
 ```python
 from orac import Orac
 
+# Basic text completion
 llm = Orac("capital")
-print(llm.completion())  # Defaults to France
-print(llm.completion(country="Japan"))
+print(llm.completion())  # Defaults to France -> "Paris"
+print(llm.completion(country="Japan"))  # -> "Tokyo"
+
+# JSON-returning prompts with automatic detection
+recipe_llm = Orac("recipe")
+result = recipe_llm(dish="cookies")  # Automatically returns dict (JSON detected)
+
+# Force JSON parsing (raises exception if not valid JSON)
+json_result = recipe_llm(dish="pasta", force_json=True)  # Returns dict
+
+# Explicit JSON parsing
+json_data = recipe_llm.completion_as_json(dish="pizza")  # Returns dict
+
+# Mixed usage - callable interface handles both text and JSON
+capital_result = llm(country="Spain")  # Returns "Madrid" (string)
+recipe_result = recipe_llm(dish="salad")  # Returns {...} (dict - auto-detected JSON)
 ```
 
 ### 3. Run from CLI
