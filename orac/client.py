@@ -108,15 +108,22 @@ def _gai_to_openai_messages(
                     content.append(
                         {"type": "image_url", "image_url": {"url": data_url}}
                     )
+                # Note: Google hack to send pdfs as image_url type
+                elif mime_type == "application/pdf":
+                    print("Warning: Sending PDF as image_url type is a Google hack.")
+                    content.append(
+                        {"type": "image_url", "image_url": {"url": data_url}}
+                    )
                 else:
                     # For non-image files, include filename and indicate it's attached
+                    # Note: Google hack to send pdfs as image_url type
                     content.append(
                         {
-                            "type": "text",
-                            "text": (
-                                f"\n\n[File attached: {filename}]\n"
-                                f"Content: {data_url}"
-                            ),
+                            "type": "file",
+                            "file": {
+                                "file_data": data_url,
+                                "filename": filename,
+                            },
                         }
                     )
             msgs.append({"role": "user", "content": content})

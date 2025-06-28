@@ -188,7 +188,7 @@ def test_generation_config_and_model_override() -> None:
 
 def test_local_file_attachment() -> None:
     """
-    Send a local text file to the `paper2audio` prompt (which is designed
+    Send a local text file to the `file_test` prompt (which is designed
     for file input).  Successful completion + no traceback is enough.
     """
     # create a tiny file to attach
@@ -203,16 +203,49 @@ def test_local_file_attachment() -> None:
                 "-m",
                 "orac.cli",
                 str(CLI_PATH),
-                "paper2audio",
+                "file_test",
                 "--file",
                 file_path,
             ]
         )
         assert out.returncode == 0
-        assert out.stdout.strip(), "paper2audio returned no text"
+        assert out.stdout.strip(), "file_test returned no text"
         print("✓ local file attachment")
     finally:
         os.unlink(file_path)
+
+
+def test_multiple_file_attachment() -> None:
+    """
+    Test that multiple files can be attached using multiple --file flags.
+    """
+    # create two temporary files
+    files = []
+    for i in range(2):
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=f"_{i}.txt") as fh:
+            fh.write(f"Content of test file {i}")
+            files.append(fh.name)
+
+    try:
+        out = run_command(
+            [
+                "python",
+                "-m",
+                "orac.cli",
+                str(CLI_PATH),
+                "file_test",
+                "--file",
+                files[0],
+                "--file", 
+                files[1],
+            ]
+        )
+        assert out.returncode == 0
+        assert out.stdout.strip(), "file_test with multiple files returned no text"
+        print("✓ multiple file attachment")
+    finally:
+        for file_path in files:
+            os.unlink(file_path)
 
 
 def test_require_file_validation() -> None:
@@ -325,6 +358,41 @@ def test_parameter_coercion_internal() -> None:
         "items": ["x", "y", "z"],
     }
     print("✓ parameter coercion")
+
+
+def test_files_parameter() -> None:
+    """Test that Orac can be instantiated with files=[] parameter containing a list of file paths."""
+    from orac.orac import Orac
+    
+    # Create temporary files
+    files = []
+    for i in range(3):
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=f"_test_{i}.txt") as fh:
+            fh.write(f"Test file content {i}")
+            files.append(fh.name)
+    
+    try:
+        # Test instantiating Orac with files parameter
+        orac = Orac("file_test", files=files)
+        
+        # Verify files are stored correctly
+        assert orac.files == files
+        assert len(orac.files) == 3
+        
+        # Verify files exist and can be read
+        for file_path in orac.files:
+            assert os.path.exists(file_path)
+            with open(file_path, 'r') as f:
+                content = f.read()
+                assert "Test file content" in content
+                
+        print("✓ files parameter with list of paths")
+        
+    finally:
+        # Clean up temporary files
+        for file_path in files:
+            if os.path.exists(file_path):
+                os.unlink(file_path)
 
 
 def test_config_override_hierarchy() -> None:
@@ -568,12 +636,14 @@ def main() -> None:
         test_json_and_schema_output()
         test_generation_config_and_model_override()
         test_local_file_attachment()
+        test_multiple_file_attachment()
         test_require_file_validation()
         test_unknown_prompt_error()
 
         # Helper / internal tests
         test_convert_cli_value_helper()
         test_parameter_coercion_internal()
+        test_files_parameter()
         test_config_override_hierarchy()
         test_direct_path_loading()
 

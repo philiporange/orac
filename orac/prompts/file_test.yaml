@@ -1,0 +1,5 @@
+prompt: |
+    Describe the content of the attached file. Provide a brief summary of what you can see or read.
+parameters: []
+require_file: true
+system_prompt: "You are a helpful assistant that can analyze file content."
