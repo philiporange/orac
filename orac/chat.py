@@ -200,24 +200,35 @@ class ChatInterface:
     def draw_interface(self, stdscr):
         try:
             height, width = stdscr.getmaxyx()
+            
+            # Ensure minimum dimensions
+            if height < 5 or width < 10:
+                return
+                
             chat_height = height - self.input_height - self.status_height
-            if chat_height < 1: chat_height = 1
+            if chat_height < 1: 
+                chat_height = 1
 
+            # Create windows
             status_win = curses.newwin(self.status_height, width, 0, 0)
             chat_win = curses.newwin(chat_height, width, self.status_height, 0)
             input_win = curses.newwin(self.input_height, width, height - self.input_height, 0)
 
+            # Draw all components
             self.draw_status_bar(status_win)
             self.draw_messages(chat_win)
             chat_win.box()
             self.draw_input_area(input_win)
             input_win.box()
 
+            # Refresh all windows
             status_win.noutrefresh()
             chat_win.noutrefresh()
             input_win.noutrefresh()
             curses.doupdate()
-        except curses.error: pass
+            
+        except curses.error:
+            pass
 
     def send_message(self):
         if not self.input_buffer.strip() or self.is_loading: return
@@ -283,8 +294,15 @@ class ChatInterface:
     def run(self, stdscr):
         self.setup_colors()
         self.load_conversation_history()
-
         
+        # Set up curses properly
+        stdscr.keypad(True)
+        stdscr.clear()
+        stdscr.refresh()  # Ensure initial clear is flushed
+        
+        # Force initial render with dirty flag
+        curses.curs_set(1)
+        self.dirty = True
 
         while True:
             if self.dirty:
