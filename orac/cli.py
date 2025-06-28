@@ -8,10 +8,12 @@ import json
 from loguru import logger
 from dotenv import load_dotenv, find_dotenv
 from pathlib import Path
+from datetime import datetime
 
 from orac.logger import configure_console_logging
 from orac.config import Config
 from orac.orac import Orac
+from orac.chat import start_chat_interface
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -248,6 +250,60 @@ def show_prompt_info(prompts_dir: str, prompt_name: str) -> None:
             example.extend([flag, sample])
     print("Example usage:\n ", " ".join(example))
 
+def list_conversations_command(prompts_dir: str):
+    """List all conversations in the database."""
+    from orac.conversation_db import ConversationDB
+
+    db = ConversationDB(Config.CONVERSATION_DB)
+    conversations = db.list_conversations()
+
+    if not conversations:
+        print("No conversations found.")
+        return
+
+    print(f"\nConversations ({len(conversations)} total):")
+    print("-" * 80)
+    print(f"{'ID':36} {'Prompt':15} {'Messages':8} {'Updated':20}")
+    print("-" * 80)
+
+    for conv in conversations:
+        # Format the timestamp
+        try:
+            dt = datetime.fromisoformat(conv['updated_at'].replace('Z', '+00:00'))
+            updated = dt.strftime("%Y-%m-%d %H:%M:%S")
+        except:
+            updated = conv['updated_at'][:19]
+
+        print(f"{conv['id']:36} {conv['prompt_name']:15} {conv['message_count']:8} {updated:20}")
+
+def delete_conversation_command(conversation_id: str):
+    """Delete a specific conversation."""
+    from orac.conversation_db import ConversationDB
+
+    db = ConversationDB(Config.CONVERSATION_DB)
+    if db.conversation_exists(conversation_id):
+        db.delete_conversation(conversation_id)
+        print(f"Deleted conversation: {conversation_id}")
+    else:
+        print(f"Conversation not found: {conversation_id}")
+
+def show_conversation_command(conversation_id: str):
+    """Show messages from a specific conversation."""
+    from orac.conversation_db import ConversationDB
+
+    db = ConversationDB(Config.CONVERSATION_DB)
+    messages = db.get_messages(conversation_id)
+
+    if not messages:
+        print(f"No messages found for conversation: {conversation_id}")
+        return
+
+    print(f"\nConversation: {conversation_id}")
+    print("-" * 80)
+    for msg in messages:
+        role_label = "User" if msg["role"] == "user" else "Assistant"
+        print(f"[{msg['timestamp']}] {role_label}:\n{msg['content']}\n")
+
 
 def main():
     # First pass: get prompt name and check for info request
@@ -266,6 +322,26 @@ def main():
         help="Show detailed information about the prompt and its parameters",
     )
     pre_parser.add_argument(
+        "--chat",
+        action="store_true",
+        help="Launch interactive chat interface",
+    )
+    pre_parser.add_argument(
+        "--list-conversations",
+        action="store_true",
+        help="List all conversations and exit",
+    )
+    pre_parser.add_argument(
+        "--delete-conversation",
+        metavar="ID",
+        help="Delete a specific conversation and exit",
+    )
+    pre_parser.add_argument(
+        "--show-conversation",
+        metavar="ID",
+        help="Show messages from a specific conversation and exit",
+    )
+    pre_parser.add_argument(
         "--verbose", "-v", action="store_true", help="Enable verbose logging output"
     )
     pre_args, remaining_argv = pre_parser.parse_known_args()
@@ -276,6 +352,60 @@ def main():
     logger.debug(f"CLI started with prompt: {pre_args.prompt}")
     logger.debug(f"Verbose mode: {pre_args.verbose}")
     logger.debug(f"Prompts directory: {pre_args.prompts_dir}")
+
+    # Handle conversation management commands
+    if pre_args.list_conversations:
+        list_conversations_command(pre_args.prompts_dir)
+        return
+
+    if pre_args.delete_conversation:
+        delete_conversation_command(pre_args.delete_conversation)
+        return
+
+    if pre_args.show_conversation:
+        show_conversation_command(pre_args.show_conversation)
+        return
+
+    # If --chat requested, launch interactive interface
+    if pre_args.chat:
+        logger.debug("Launching interactive chat interface")
+        # Parse remaining args for Orac configuration
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument("--model-name", help="Override model_name for the LLM")
+        parser.add_argument("--api-key", help="Override API key for LLM")
+        parser.add_argument(
+            "--provider",
+            choices=["openai", "google", "anthropic", "azure", "openrouter", "custom"],
+            help="Select LLM provider",
+        )
+        parser.add_argument("--base-url", help="Custom base URL")
+        parser.add_argument("--generation-config", help="JSON string for generation_config")
+        parser.add_argument("--conversation-id", help="Specify conversation ID")
+
+        args, _ = parser.parse_known_args(remaining_argv)
+
+        # Parse generation config if provided
+        gen_config = None
+        if args.generation_config:
+            try:
+                gen_config = json.loads(args.generation_config)
+            except Exception as e:
+                print(f"Error: generation_config is not valid JSON: {e}", file=sys.stderr)
+                sys.exit(1)
+
+        # Launch chat interface
+        start_chat_interface(
+            prompt_name=pre_args.prompt,
+            prompts_dir=pre_args.prompts_dir,
+            conversation_id=args.conversation_id,
+            model_name=args.model_name,
+            api_key=args.api_key,
+            provider=args.provider,
+            base_url=args.base_url,
+            generation_config=gen_config,
+            verbose=pre_args.verbose,
+        )
+        return
 
     # If --info requested, show info and exit
     if pre_args.info:
@@ -332,6 +462,21 @@ def main():
         metavar="FILE",
         help="Path to JSON schema file for response_schema (OpenAPI style)",
     )
+    # Conversation mode flags
+    parser.add_argument(
+        "--conversation-id",
+        help="Specify conversation ID (auto-generated if not provided)",
+    )
+    parser.add_argument(
+        "--reset-conversation",
+        action="store_true",
+        help="Reset conversation before starting",
+    )
+    parser.add_argument(
+        "--no-save",
+        action="store_true",
+        help="Don't save messages to conversation history",
+    )
 
     # Add parameters from the prompt spec with enhanced type support
     for param in params_spec:
@@ -342,6 +487,9 @@ def main():
         examples = ["\nExamples:"]
         examples.append(
             f"  python cli.py {pre_args.prompt} --info  # Show parameter details"
+        )
+        examples.append(
+            f"  python cli.py {pre_args.prompt} --chat  # Interactive chat mode"
         )
 
         # Basic example
@@ -420,7 +568,14 @@ def main():
             file_urls=args.file_urls,
             provider=args.provider,
             base_url=args.base_url,
+            conversation_id=args.conversation_id,
+            auto_save=not args.no_save,
         )
+
+        # Reset conversation if requested
+        if args.reset_conversation and args.conversation:
+            wrapper.reset_conversation()
+            logger.info("Reset conversation history")
 
         logger.debug("Calling completion method")
         result = wrapper.completion(**param_values)

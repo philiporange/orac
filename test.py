@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -236,7 +237,7 @@ def test_multiple_file_attachment() -> None:
                 "file_test",
                 "--file",
                 files[0],
-                "--file", 
+                "--file",
                 files[1],
             ]
         )
@@ -363,31 +364,31 @@ def test_parameter_coercion_internal() -> None:
 def test_files_parameter() -> None:
     """Test that Orac can be instantiated with files=[] parameter containing a list of file paths."""
     from orac.orac import Orac
-    
+
     # Create temporary files
     files = []
     for i in range(3):
         with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=f"_test_{i}.txt") as fh:
             fh.write(f"Test file content {i}")
             files.append(fh.name)
-    
+
     try:
         # Test instantiating Orac with files parameter
         orac = Orac("file_test", files=files)
-        
+
         # Verify files are stored correctly
         assert orac.files == files
         assert len(orac.files) == 3
-        
+
         # Verify files exist and can be read
         for file_path in orac.files:
             assert os.path.exists(file_path)
             with open(file_path, 'r') as f:
                 content = f.read()
                 assert "Test file content" in content
-                
+
         print("✓ files parameter with list of paths")
-        
+
     finally:
         # Clean up temporary files
         for file_path in files:
@@ -510,10 +511,10 @@ def test_direct_path_loading() -> None:
 def test_completion_as_json_method() -> None:
     """Test the completion_as_json method with recipe prompt (returns JSON)."""
     from orac.orac import Orac
-    
+
     recipe = Orac("recipe", provider="google")
     result = recipe.completion_as_json(dish="cookies")
-    
+
     # Should return a dict (parsed JSON)
     assert isinstance(result, dict)
     assert "title" in result
@@ -521,7 +522,7 @@ def test_completion_as_json_method() -> None:
     assert "steps" in result
     assert isinstance(result["ingredients"], list)
     assert isinstance(result["steps"], list)
-    
+
     print("✓ completion_as_json method")
 
 
@@ -529,9 +530,9 @@ def test_completion_as_json_with_text_prompt() -> None:
     """Test completion_as_json method fails with text-only prompt."""
     from orac.orac import Orac
     import json
-    
+
     capital = Orac("capital", provider="google")
-    
+
     # Should raise JSONDecodeError since capital returns plain text
     try:
         capital.completion_as_json(country="France")
@@ -539,57 +540,57 @@ def test_completion_as_json_with_text_prompt() -> None:
     except json.JSONDecodeError:
         # This is expected
         pass
-    
+
     print("✓ completion_as_json error handling")
 
 
 def test_callable_interface_auto_detection() -> None:
     """Test __call__ method with automatic JSON detection."""
     from orac.orac import Orac
-    
+
     # Test with JSON-returning prompt
     recipe = Orac("recipe", provider="google")
     result = recipe(dish="pancakes")
-    
+
     # Should auto-detect and return dict
     assert isinstance(result, dict)
     assert "title" in result
-    
-    # Test with text-returning prompt  
+
+    # Test with text-returning prompt
     capital = Orac("capital", provider="google")
     result = capital(country="Japan")
-    
+
     # Should return string
     assert isinstance(result, str)
     assert result.strip()  # Should have content
-    
+
     print("✓ callable interface auto-detection")
 
 
 def test_callable_interface_force_json() -> None:
     """Test __call__ method with force_json parameter."""
     from orac.orac import Orac
-    
+
     # Test force_json=True with JSON prompt (should succeed)
     recipe = Orac("recipe", provider="google")
     result = recipe(dish="cookies", force_json=True)
     assert isinstance(result, dict)
-    
+
     # Test force_json=True with text prompt (should fail)
-    capital = Orac("capital", provider="google") 
+    capital = Orac("capital", provider="google")
     try:
         capital(country="France", force_json=True)
         assert False, "Expected ValueError but method succeeded"
     except ValueError as e:
         assert "not valid JSON" in str(e)
-    
+
     print("✓ callable interface force_json parameter")
 
 
 def test_callable_interface_parameters() -> None:
     """Test that __call__ method accepts all completion parameters."""
     from orac.orac import Orac
-    
+
     # Test with various parameters
     recipe = Orac("recipe", provider="google")
     result = recipe(
@@ -597,11 +598,153 @@ def test_callable_interface_parameters() -> None:
         generation_config={"temperature": 0.1},
         model_name="gemini-2.0-flash-001"
     )
-    
+
     assert isinstance(result, dict)
     assert "title" in result
-    
+
     print("✓ callable interface parameter passing")
+
+
+# --------------------------------------------------------------------------- #
+# Conversation tests                                                          #
+# --------------------------------------------------------------------------- #
+def test_conversation_basic() -> None:
+    """Test basic conversation functionality."""
+    from orac.orac import Orac
+    import uuid
+
+    # Create unique conversation ID for this test
+    conv_id = f"test_{uuid.uuid4()}"
+
+    # First message
+    chat = Orac("capital", use_conversation=True, conversation_id=conv_id)
+    response1 = chat.completion(country="France")
+    assert "paris" in response1.lower()
+
+    # Second message should have context
+    chat2 = Orac("capital", use_conversation=True, conversation_id=conv_id)
+    history = chat2.get_conversation_history()
+    assert len(history) == 2  # User + Assistant messages
+    assert history[0]["role"] == "user"
+    assert "France" in history[0]["content"]
+    assert history[1]["role"] == "assistant"
+    assert "Paris" in history[1]["content"]
+
+    # Cleanup
+    chat2.delete_conversation()
+
+    print("✓ basic conversation functionality")
+
+
+def test_conversation_reset() -> None:
+    """Test conversation reset functionality."""
+    from orac.orac import Orac
+    import uuid
+
+    conv_id = f"test_{uuid.uuid4()}"
+
+    # Create conversation with messages
+    chat = Orac("capital", use_conversation=True, conversation_id=conv_id)
+    chat.completion(country="Japan")
+
+    # Verify messages exist
+    history = chat.get_conversation_history()
+    assert len(history) > 0
+
+    # Reset conversation
+    chat.reset_conversation()
+
+    # Verify messages are gone
+    history = chat.get_conversation_history()
+    assert len(history) == 0
+
+    # Cleanup
+    chat.delete_conversation()
+
+    print("✓ conversation reset")
+
+
+def test_conversation_cli() -> None:
+    """Test conversation mode via CLI."""
+    import uuid
+
+    conv_id = f"test_cli_{uuid.uuid4()}"
+
+    # First message
+    out1 = run_command([
+        "python", "-m", "orac.cli", "chat",
+        "--conversation-id", conv_id,
+        "--message", "What is the capital of Spain?",
+    ])
+    assert out1.returncode == 0
+    assert "madrid" in out1.stdout.lower()
+
+    # List conversations
+    out2 = run_command([
+        "python", "-m", "orac.cli", "chat",
+        "--list-conversations"
+    ])
+    assert out2.returncode == 0
+    assert conv_id in out2.stdout
+
+    # Show conversation
+    out3 = run_command([
+        "python", "-m", "orac.cli", "chat",
+        "--show-conversation", conv_id
+    ])
+    assert out3.returncode == 0
+    assert "Madrid" in out3.stdout
+
+    # Delete conversation
+    out4 = run_command([
+        "python", "-m", "orac.cli", "chat",
+        "--delete-conversation", conv_id
+    ])
+    assert out4.returncode == 0
+    assert f"Deleted conversation: {conv_id}" in out4.stdout
+
+    print("✓ conversation CLI commands")
+
+
+def test_conversation_auto_id() -> None:
+    """Test automatic conversation ID generation."""
+    from orac.orac import Orac
+
+    # Create without specifying ID
+    chat = Orac("capital", use_conversation=True)
+    assert chat.conversation_id is not None
+    assert len(chat.conversation_id) > 0
+
+    # Use it
+    response = chat.completion(country="Italy")
+    assert "rome" in response.lower()
+
+    # Verify it was saved
+    history = chat.get_conversation_history()
+    assert len(history) == 2
+
+    # Cleanup
+    chat.delete_conversation()
+
+    print("✓ automatic conversation ID generation")
+
+
+def test_conversation_disabled_by_default() -> None:
+    """Test that conversations are disabled by default."""
+    from orac.orac import Orac
+
+    # Create without conversation flag
+    llm = Orac("capital")
+    assert llm.use_conversation is False
+
+    # Should raise error when trying to use conversation methods
+    try:
+        llm.get_conversation_history()
+        assert False, "Expected ValueError"
+    except ValueError:
+        pass
+
+    print("✓ conversations disabled by default")
 
 # --------------------------------------------------------------------------- #
 # Main entry point                                                            #
@@ -653,6 +796,13 @@ def main() -> None:
         test_callable_interface_auto_detection()
         test_callable_interface_force_json()
         test_callable_interface_parameters()
+
+        # Conversation tests
+        test_conversation_basic()
+        test_conversation_reset()
+        test_conversation_cli()
+        test_conversation_auto_id()
+        test_conversation_disabled_by_default()
 
         print("\n🎉  All tests passed!")
     except AssertionError as e:

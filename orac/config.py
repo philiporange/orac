@@ -120,6 +120,17 @@ class Config:
     LOG_FILE: Final[Path] = Path(os.getenv("ORAC_LOG_FILE", PROJECT_ROOT / "llm.log"))
 
     # ------------------------------------------------------------------ #
+    # Conversation settings                                              #
+    # ------------------------------------------------------------------ #
+    CONVERSATION_DB: Final[Path] = Path(
+        os.getenv("ORAC_CONVERSATION_DB", Path.home() / ".orac" / "conversations.db")
+    )
+    DEFAULT_CONVERSATION_MODE: Final[bool] = (
+        os.getenv("ORAC_DEFAULT_CONVERSATION_MODE", "false").lower() in ("true", "1", "yes")
+    )
+    MAX_CONVERSATION_HISTORY: Final[int] = int(os.getenv("ORAC_MAX_CONVERSATION_HISTORY", "20"))
+
+    # ------------------------------------------------------------------ #
     # Dunder methods                                                     #
     # ------------------------------------------------------------------ #
     __slots__ = ()

@@ -12,6 +12,7 @@
 * **Hierarchical configuration**: Three-layer config system (base → prompt → runtime) with deep merging for flexible overrides.
 * **Templated inputs**: Use `${variable}` placeholders in prompt and system prompt fields.
 * **File support**: Attach local or remote files (e.g., images, documents) via `files:` or `file_urls:` in YAML or CLI flags.
+* **Conversation mode**: Automatic context preservation with SQLite-based history. Enable with `conversation: true` in YAML for seamless multi-turn interactions.
 * **Command-line and Python API**: Use either the CLI tool or the `LLMWrapper` class in code.
 * **Runtime configuration overrides**: Override model settings, API keys, generation options, and safety filters from the CLI or programmatically.
 * **Structured output support**: Request `application/json` responses or validate against a JSON Schema.
@@ -149,7 +150,7 @@ Running `orac recipe --generation-config '{"temperature": 0.9}'` will use a temp
 
 ## Example Usage
 
-### 1. Create a YAML prompt
+### 1. Basic YAML prompt
 
 Save the following to `prompts/capital.yaml`:
 
@@ -159,6 +160,17 @@ parameters:
   - name: country
     description: Country name
     default: France
+```
+
+### 1b. Conversation-enabled prompt
+
+Orac includes a built-in `chat.yaml` prompt for conversational interactions:
+
+```bash
+# These automatically maintain conversation context
+orac chat --message "What is machine learning?"
+orac chat --message "Give me a simple example"
+orac chat --message "How do I get started?"
 ```
 
 ### 2. Run from Python
@@ -217,6 +229,56 @@ orac paper2audio \
   --file-url https://example.com/image.jpg
 ```
 
+### 5. Conversation mode
+
+Orac supports automatic conversation mode that maintains context between interactions. Prompts can enable this by default in their YAML configuration.
+
+```bash
+# With conversation-enabled prompts (like chat.yaml), context is automatic
+orac chat --message "What is 10 times 4?"    # → "40"
+orac chat --message "Divided by 8?"          # → "5" (remembers context!)
+
+# Use specific conversation ID for multiple parallel conversations
+orac chat --conversation-id work --message "Help me with coding"
+orac chat --conversation-id personal --message "Plan my vacation"
+
+# Reset conversation before starting
+orac chat --reset-conversation --message "Let's start fresh"
+
+# Conversation management commands
+orac chat --list-conversations              # List all conversations
+orac chat --show-conversation CONVERSATION_ID   # Show conversation history
+orac chat --delete-conversation CONVERSATION_ID # Delete a conversation
+```
+
+### Python API with Conversations
+
+```python
+from orac import Orac
+
+# Automatic conversation mode (if enabled in YAML)
+chat = Orac("chat")  # chat.yaml has conversation: true
+print(chat("Hello! What's 15 + 25?"))      # → "40"
+print(chat("Times 3?"))                     # → "120" (maintains context)
+
+# Manual conversation control
+assistant = Orac("capital", use_conversation=True, conversation_id="geography")
+print(assistant(country="France"))         # → "Paris"
+print(assistant(country="Japan"))          # → "Tokyo" (with context)
+
+# Review conversation history
+history = chat.get_conversation_history()
+for msg in history:
+    print(f"{msg['role']}: {msg['content']}")
+
+# Reset when done
+chat.reset_conversation()
+
+# Override conversation mode (even if YAML enables it)
+single_shot = Orac("chat", use_conversation=False)
+print(single_shot("One-time question"))    # No conversation context
+```
+
 ---
 
 ## YAML Prompt Reference
@@ -257,6 +319,37 @@ file_urls:
   - https://example.com/image.jpg
 
 require_file: true
+
+# Conversation mode settings
+conversation: true                # Enable conversation mode by default
+                                 # When true, prompt is automatically set to '${message}'
+                                 # Optional 'prompt' field provides fallback for non-conversation usage
+```
+
+### Conversation Mode YAML
+
+For conversation-enabled prompts, you can simply enable conversation mode:
+
+```yaml
+# chat.yaml - A conversation-enabled assistant
+model_name: "gemini-2.5-flash"
+
+# Enable conversation mode - prompt automatically becomes '${message}'
+conversation: true
+
+# Optional: fallback prompt for when conversation is explicitly disabled
+prompt: "Please respond to this message: ${message}"
+
+system_prompt: |
+    You are a helpful AI assistant. You are operating in conversation mode
+    where context from previous messages is available.
+
+parameters:
+    - name: message
+      type: string
+      required: true
+      default: "Hi!"
+      description: "Your message or question for the assistant"
 ```
 
 ### Supported Parameter Types
@@ -289,6 +382,14 @@ orac <prompt_name> [--parameter-name VALUE ...] [options]
 * `--json-output`
 * `--response-schema FILE`
 * `--output FILE`, `-o`
+* `--conversation-id ID`
+* `--reset-conversation`
+* `--no-save`
+
+### Conversation Management
+* `--list-conversations`
+* `--show-conversation ID`
+* `--delete-conversation ID`
 
 ---
 
@@ -329,6 +430,38 @@ To configure logging programmatically:
 from orac.logger import configure_console_logging
 configure_console_logging(verbose=True)
 ```
+
+---
+
+## Conversation Settings
+
+Conversations are automatically stored in a local SQLite database and can be enabled per-prompt via YAML configuration.
+
+### Configuration Methods
+
+1. **YAML-level** (recommended): Add `conversation: true` to your prompt YAML
+2. **Runtime**: Use `--conversation` flag or `use_conversation=True` parameter
+3. **Global default**: Set `ORAC_DEFAULT_CONVERSATION_MODE=true` environment variable
+
+### Environment Variables
+
+- `ORAC_CONVERSATION_DB` - Database file location (default: `~/.orac/conversations.db`)
+- `ORAC_DEFAULT_CONVERSATION_MODE` - Enable conversations globally (default: `false`)
+- `ORAC_MAX_CONVERSATION_HISTORY` - Maximum messages to load from history (default: `20`)
+
+```bash
+# Global conversation settings
+export ORAC_DEFAULT_CONVERSATION_MODE=true
+export ORAC_MAX_CONVERSATION_HISTORY=50
+export ORAC_CONVERSATION_DB="/path/to/conversations.db"
+```
+
+### Key Behavior
+
+- **YAML `conversation: true`**: Automatically enables conversation mode and sets prompt to `${message}`
+- **Runtime override**: `use_conversation=False` or `--conversation` flag can override YAML settings
+- **Auto-continuation**: When no `--conversation-id` is specified, continues the most recent conversation for that prompt
+- **Multiple conversations**: Use `--conversation-id` to maintain parallel conversations
 
 ---
 

@@ -20,6 +20,7 @@ from loguru import logger
 
 from orac.client import call_api
 from orac.config import Config, Provider, LLM_PROVIDER
+from orac.conversation_db import ConversationDB
 
 
 # --------------------------------------------------------------------------- #
@@ -144,6 +145,10 @@ class Orac:
         file_urls: Optional[List[str]] = None,
         provider: Optional[str | Provider] = None,
         base_url: Optional[str] = None,
+        use_conversation: Optional[bool] = None,
+        conversation_id: Optional[str] = None,
+        auto_save: bool = True,
+        max_history: Optional[int] = None,
     ):
         # Detect “direct file” mode (prompt_name points to a real .yaml file)
         pn_path = Path(prompt_name)
@@ -161,6 +166,12 @@ class Orac:
         self.verbose = verbose
         self.files = files or []
         self.file_urls = file_urls or []
+        
+        # Store conversation constructor params (will be processed after config loading)
+        self._init_use_conversation = use_conversation
+        self._init_conversation_id = conversation_id
+        self._init_auto_save = auto_save
+        self._init_max_history = max_history
 
         # Resolve provider
         self.provider: Provider | None = None
@@ -200,6 +211,37 @@ class Orac:
         # 3. Deep merge
         self.config = _deep_merge_dicts(base_config, prompt_config)
         self._parse_and_validate_config()
+
+        # -------------------------- conversation setup ------------------------ #
+        # Runtime param takes precedence, then YAML config, then global default
+        if self._init_use_conversation is not None:
+            # Explicit runtime parameter provided
+            self.use_conversation = self._init_use_conversation
+        elif self.yaml_conversation:
+            # YAML config specifies conversation mode
+            self.use_conversation = True
+        else:
+            # Use global default
+            self.use_conversation = Config.DEFAULT_CONVERSATION_MODE
+        self.conversation_id = self._init_conversation_id
+        self.auto_save = self._init_auto_save
+        self.max_history = self._init_max_history or Config.MAX_CONVERSATION_HISTORY
+        self._conversation_db: Optional[ConversationDB] = None
+        
+        # Initialize conversation if needed
+        if self.use_conversation:
+            self._init_conversation()
+
+        # -------------------------- prompt setup --------------------------- #
+        # Set prompt template based on final conversation mode determination
+        if self.use_conversation:
+            # In conversation mode, always use the standard message template
+            self.prompt_template_str = "${message}"
+        else:
+            # Normal mode requires explicit prompt
+            if not self.yaml_prompt or not isinstance(self.yaml_prompt, str):
+                raise ValueError("Config must contain a top-level 'prompt' string.")
+            self.prompt_template_str = self.yaml_prompt
 
         # -------------------------- client-kwargs -------------------------- #
         client_kwargs: Dict[str, Any] = {}
@@ -243,10 +285,16 @@ class Orac:
         """Read & validate keys from the merged self.config dictionary."""
         data = self.config
 
-        # prompt
-        if "prompt" not in data or not isinstance(data["prompt"], str):
-            raise ValueError("Config must contain a top-level 'prompt' string.")
-        self.prompt_template_str = data["prompt"]
+        # conversation settings (parse early as it affects prompt handling)
+        self.yaml_conversation = data.get("conversation", False)
+        if not isinstance(self.yaml_conversation, bool):
+            raise ValueError("'conversation' must be a boolean when provided.")
+        
+        # For conversation prompts, having a fallback prompt is actually useful
+        # for when someone explicitly disables conversation mode at runtime
+
+        # Store YAML prompt for later processing (after conversation mode is determined)
+        self.yaml_prompt = data.get("prompt")
 
         self.system_prompt_template_str = data.get("system_prompt")
         if self.system_prompt_template_str is not None and not isinstance(
@@ -384,6 +432,37 @@ class Orac:
                 seen.add(u)
         return unique_urls
 
+    # ------------------- conversation management ------------------------- #
+    def _init_conversation(self):
+        """Initialize conversation database and ID."""
+        if self._conversation_db is None:
+            self._conversation_db = ConversationDB(Config.CONVERSATION_DB)
+        
+        if self.conversation_id is None:
+            # Try to reuse the most recent conversation for this prompt
+            conversations = self._conversation_db.list_conversations()
+            recent_conv = None
+            for conv in conversations:
+                if conv['prompt_name'] == self.prompt_name:
+                    recent_conv = conv
+                    break  # list_conversations() returns newest first
+            
+            if recent_conv:
+                self.conversation_id = recent_conv['id']
+                logger.debug(f"Reusing recent conversation: {self.conversation_id}")
+            else:
+                # No existing conversation for this prompt, create new one
+                self.conversation_id = self._conversation_db.create_conversation(
+                    prompt_name=self.prompt_name
+                )
+                logger.debug(f"Created new conversation: {self.conversation_id}")
+        elif not self._conversation_db.conversation_exists(self.conversation_id):
+            # Create conversation if it doesn't exist
+            self._conversation_db.create_conversation(
+                conversation_id=self.conversation_id,
+                prompt_name=self.prompt_name
+            )
+
     # --------------------------- completion ------------------------------ #
     def completion(
         self,
@@ -400,7 +479,10 @@ class Orac:
         """
         # Resolve parameters & fill templates
         params = self._resolve_parameters(**kwargs_params)
+        
+        # Format the user prompt
         user_prompt = self._format_string(self.prompt_template_str, params)
+            
         system_prompt = self._format_string(self.system_prompt_template_str, params)
 
         # ----------------------- File handling --------------------------- #
@@ -437,18 +519,45 @@ class Orac:
         merged_cfg = _merge_generation_config(base_cfg, extra_cfg)
         call_kwargs["generation_config"] = _inject_response_format(merged_cfg)
 
-        # Build message history
+        # Build message history - with conversation support
         api_history: List[Dict[str, Any]] = list(message_history or [])
+        
+        # Load conversation history if enabled
+        if self.use_conversation and self._conversation_db:
+            stored_messages = self._conversation_db.get_messages(
+                self.conversation_id, limit=self.max_history
+            )
+            for msg in stored_messages:
+                api_history.append({
+                    "role": "user" if msg["role"] == "user" else "model",
+                    "text": msg["content"]
+                })
+        
+        # Add current user message
         api_history.append({"role": "user", "text": user_prompt})
+        
+        # Save user message if conversation is enabled
+        if self.use_conversation and self.auto_save and self._conversation_db:
+            self._conversation_db.add_message(
+                self.conversation_id, "user", user_prompt
+            )
 
         # Call the client – pass provider **once**
-        return call_api(
+        result = call_api(
             provider=self.provider,
             message_history=api_history,
             file_paths=all_files,
             system_prompt=system_prompt,
             **call_kwargs,
         )
+        
+        # Save assistant response if conversation is enabled
+        if self.use_conversation and self.auto_save and self._conversation_db:
+            self._conversation_db.add_message(
+                self.conversation_id, "assistant", result
+            )
+        
+        return result
 
     def completion_as_json(
         self,
@@ -532,3 +641,53 @@ class Orac:
                 }
             )
         return info
+    
+    # ------------------- conversation methods ---------------------------- #
+    def reset_conversation(self):
+        """Reset the current conversation by deleting all messages."""
+        if not self.use_conversation or not self._conversation_db:
+            raise ValueError("Conversation mode is not enabled")
+        
+        if self.conversation_id:
+            self._conversation_db.delete_conversation(self.conversation_id)
+            # Recreate the conversation
+            self._conversation_db.create_conversation(
+                conversation_id=self.conversation_id,
+                prompt_name=self.prompt_name
+            )
+            logger.info(f"Reset conversation: {self.conversation_id}")
+    
+    def get_conversation_history(self) -> List[Dict[str, Any]]:
+        """Get the conversation history.
+        
+        Returns:
+            List of messages with role and content.
+        """
+        if not self.use_conversation or not self._conversation_db:
+            raise ValueError("Conversation mode is not enabled")
+        
+        return self._conversation_db.get_messages(self.conversation_id)
+    
+    def list_conversations(self) -> List[Dict[str, Any]]:
+        """List all conversations.
+        
+        Returns:
+            List of conversation metadata.
+        """
+        if not self._conversation_db:
+            self._conversation_db = ConversationDB(Config.CONVERSATION_DB)
+        
+        return self._conversation_db.list_conversations()
+    
+    def delete_conversation(self, conversation_id: Optional[str] = None):
+        """Delete a conversation.
+        
+        Args:
+            conversation_id: The conversation to delete. Uses current if None.
+        """
+        if not self._conversation_db:
+            self._conversation_db = ConversationDB(Config.CONVERSATION_DB)
+        
+        target_id = conversation_id or self.conversation_id
+        if target_id:
+            self._conversation_db.delete_conversation(target_id)
