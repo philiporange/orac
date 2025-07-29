@@ -482,6 +482,7 @@ orac <prompt_name> [--parameter-name VALUE ...] [options]
 
 * `--info`: Show parameter metadata
 * `--verbose`, `-v`: Enable verbose logging
+* `--quiet`, `-q`: Suppress progress output (only show errors)
 * `--prompts-dir DIR`: Use custom prompt directory
 * `--model-name MODEL`
 * `--api-key KEY`
@@ -495,6 +496,71 @@ orac <prompt_name> [--parameter-name VALUE ...] [options]
 * `--conversation-id ID`
 * `--reset-conversation`
 * `--no-save`
+
+### Progress Tracking
+
+Orac provides real-time progress feedback for long-running operations:
+
+**CLI Progress Display:**
+```bash
+# Default mode shows workflow progress with emojis and timestamps
+orac workflow run research_assistant --topic "AI ethics"
+
+# Verbose mode shows detailed progress including individual prompts
+orac workflow run research_assistant --topic "AI safety" --verbose
+
+# Quiet mode suppresses progress (only shows errors)
+orac workflow run research_assistant --topic "Machine learning" --quiet
+```
+
+**Progress Output Example:**
+```
+🚀 14:32:15 - Starting workflow: Research Assistant
+   Total steps: 3
+   Execution order: initial_research → analyze_findings → final_report
+
+📝 14:32:16 - [1/3] (33%) Executing step: initial_research
+   Prompt: chat
+✅ 14:32:45 - Step completed: initial_research (29.2s)
+
+📝 14:32:45 - [2/3] (67%) Executing step: analyze_findings
+✅ 14:33:12 - Step completed: analyze_findings (26.8s)
+
+📝 14:33:12 - [3/3] (100%) Executing step: final_report
+✅ 14:33:35 - Step completed: final_report (23.1s)
+
+🎉 14:33:35 - Completed workflow: Research Assistant in 80.1s
+   Final outputs: research_summary, key_insights
+```
+
+**Programmatic Progress Tracking:**
+```python
+from orac import Orac
+from orac.progress import ProgressTracker, ProgressEvent, ProgressType
+
+# Built-in progress tracker
+tracker = ProgressTracker()
+orac = Orac("capital", progress_callback=tracker.track)
+result = orac(country="France")
+
+# Get progress summary
+summary = tracker.to_summary()
+print(f"Operation took {summary['duration_seconds']:.1f} seconds")
+print(f"Total events: {summary['total_events']}")
+
+# Custom progress handler
+def my_progress_handler(event: ProgressEvent):
+    if event.type == ProgressType.PROMPT_START:
+        print(f"🔄 Starting: {event.message}")
+    elif event.type == ProgressType.PROMPT_COMPLETE:
+        print(f"✅ Completed: {event.message}")
+    elif event.type in (ProgressType.PROMPT_ERROR, ProgressType.WORKFLOW_ERROR):
+        print(f"❌ Error: {event.message}")
+
+# Use custom handler
+orac = Orac("recipe", progress_callback=my_progress_handler)
+result = orac(dish="pasta")
+```
 
 ### Conversation Management
 * `--list-conversations`

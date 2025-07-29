@@ -21,6 +21,7 @@ from loguru import logger
 from orac.client import call_api
 from orac.config import Config, Provider, LLM_PROVIDER
 from orac.conversation_db import ConversationDB
+from orac.progress import ProgressCallback, ProgressEvent, ProgressType
 
 
 # --------------------------------------------------------------------------- #
@@ -149,6 +150,7 @@ class Orac:
         conversation_id: Optional[str] = None,
         auto_save: bool = True,
         max_history: Optional[int] = None,
+        progress_callback: Optional[ProgressCallback] = None,
     ):
         # Detect “direct file” mode (prompt_name points to a real .yaml file)
         pn_path = Path(prompt_name)
@@ -166,6 +168,7 @@ class Orac:
         self.verbose = verbose
         self.files = files or []
         self.file_urls = file_urls or []
+        self.progress_callback = progress_callback
         
         # Store conversation constructor params (will be processed after config loading)
         self._init_use_conversation = use_conversation
@@ -474,90 +477,133 @@ class Orac:
         **kwargs_params,
     ) -> str:
         """
-        Execute the prompt and return the model’s response.
+        Execute the prompt and return the model's response.
         (String for normal prompts, JSON string when JSON/Schema mode.)
         """
-        # Resolve parameters & fill templates
-        params = self._resolve_parameters(**kwargs_params)
+        # Emit progress start event
+        if self.progress_callback:
+            self.progress_callback(ProgressEvent(
+                type=ProgressType.PROMPT_START,
+                message=f"Starting prompt: {self.prompt_name}",
+                metadata={"prompt_name": self.prompt_name, "params": kwargs_params}
+            ))
+
+        try:
+            # Resolve parameters & fill templates
+            params = self._resolve_parameters(**kwargs_params)
         
-        # Format the user prompt
-        user_prompt = self._format_string(self.prompt_template_str, params)
-            
-        system_prompt = self._format_string(self.system_prompt_template_str, params)
+            # Format the user prompt
+            user_prompt = self._format_string(self.prompt_template_str, params)
+                
+            system_prompt = self._format_string(self.system_prompt_template_str, params)
 
-        # ----------------------- File handling --------------------------- #
-        local_files = self._resolve_local_file_paths()
-        local_files.extend(
-            os.path.abspath(p) for p in (self.files or []) if p and os.path.isfile(p)
-        )
+            # ----------------------- File handling --------------------------- #
+            local_files = self._resolve_local_file_paths()
+            local_files.extend(
+                os.path.abspath(p) for p in (self.files or []) if p and os.path.isfile(p)
+            )
 
-        all_urls = self._resolve_remote_urls()
-        if file_urls:
-            all_urls.extend(file_urls)
-        downloaded_paths = [_download_remote_file(u) for u in all_urls]
+            all_urls = self._resolve_remote_urls()
+            if file_urls:
+                all_urls.extend(file_urls)
+            downloaded_paths = [_download_remote_file(u) for u in all_urls]
 
-        all_files = local_files + downloaded_paths
+            all_files = local_files + downloaded_paths
 
-        if self.yaml_require_file and not all_files:
-            raise ValueError(
-                (
-                    f"Files are required for prompt '{self.prompt_name}' "
-                    "but none were supplied."
+            if self.yaml_require_file and not all_files:
+                raise ValueError(
+                    (
+                        f"Files are required for prompt '{self.prompt_name}' "
+                        "but none were supplied."
+                    )
                 )
+
+            # -------------------- Assemble call-kwargs ----------------------- #
+            call_kwargs = deepcopy(self.client_kwargs)
+
+            if model_name is not None:
+                call_kwargs["model_name"] = model_name
+            if api_key is not None:
+                call_kwargs["api_key"] = api_key
+
+            base_cfg = deepcopy(call_kwargs.get("generation_config") or {})
+            extra_cfg = deepcopy(generation_config) or {}
+            merged_cfg = _merge_generation_config(base_cfg, extra_cfg)
+            call_kwargs["generation_config"] = _inject_response_format(merged_cfg)
+
+            # Build message history - with conversation support
+            api_history: List[Dict[str, Any]] = list(message_history or [])
+            
+            # Load conversation history if enabled
+            if self.use_conversation and self._conversation_db:
+                stored_messages = self._conversation_db.get_messages(
+                    self.conversation_id, limit=self.max_history
+                )
+                for msg in stored_messages:
+                    api_history.append({
+                        "role": "user" if msg["role"] == "user" else "model",
+                        "text": msg["content"]
+                    })
+            
+            # Add current user message
+            api_history.append({"role": "user", "text": user_prompt})
+            
+            # Save user message if conversation is enabled
+            if self.use_conversation and self.auto_save and self._conversation_db:
+                self._conversation_db.add_message(
+                    self.conversation_id, "user", user_prompt
+                )
+
+            # Emit API request start progress
+            if self.progress_callback:
+                self.progress_callback(ProgressEvent(
+                    type=ProgressType.API_REQUEST_START,
+                    message=f"Making API request for prompt: {self.prompt_name}",
+                    metadata={"files_count": len(all_files), "message_history_length": len(api_history)}
+                ))
+
+            # Call the client – pass provider **once**
+            result = call_api(
+                provider=self.provider,
+                message_history=api_history,
+                file_paths=all_files,
+                system_prompt=system_prompt,
+                **call_kwargs,
             )
-
-        # -------------------- Assemble call-kwargs ----------------------- #
-        call_kwargs = deepcopy(self.client_kwargs)
-
-        if model_name is not None:
-            call_kwargs["model_name"] = model_name
-        if api_key is not None:
-            call_kwargs["api_key"] = api_key
-
-        base_cfg = deepcopy(call_kwargs.get("generation_config") or {})
-        extra_cfg = deepcopy(generation_config) or {}
-        merged_cfg = _merge_generation_config(base_cfg, extra_cfg)
-        call_kwargs["generation_config"] = _inject_response_format(merged_cfg)
-
-        # Build message history - with conversation support
-        api_history: List[Dict[str, Any]] = list(message_history or [])
-        
-        # Load conversation history if enabled
-        if self.use_conversation and self._conversation_db:
-            stored_messages = self._conversation_db.get_messages(
-                self.conversation_id, limit=self.max_history
-            )
-            for msg in stored_messages:
-                api_history.append({
-                    "role": "user" if msg["role"] == "user" else "model",
-                    "text": msg["content"]
-                })
-        
-        # Add current user message
-        api_history.append({"role": "user", "text": user_prompt})
-        
-        # Save user message if conversation is enabled
-        if self.use_conversation and self.auto_save and self._conversation_db:
-            self._conversation_db.add_message(
-                self.conversation_id, "user", user_prompt
-            )
-
-        # Call the client – pass provider **once**
-        result = call_api(
-            provider=self.provider,
-            message_history=api_history,
-            file_paths=all_files,
-            system_prompt=system_prompt,
-            **call_kwargs,
-        )
-        
-        # Save assistant response if conversation is enabled
-        if self.use_conversation and self.auto_save and self._conversation_db:
-            self._conversation_db.add_message(
-                self.conversation_id, "assistant", result
-            )
-        
-        return result
+            
+            # Emit API request complete progress
+            if self.progress_callback:
+                self.progress_callback(ProgressEvent(
+                    type=ProgressType.API_REQUEST_COMPLETE,
+                    message=f"API request completed for prompt: {self.prompt_name}",
+                    metadata={"response_length": len(result)}
+                ))
+            
+            # Save assistant response if conversation is enabled
+            if self.use_conversation and self.auto_save and self._conversation_db:
+                self._conversation_db.add_message(
+                    self.conversation_id, "assistant", result
+                )
+            
+            # Emit prompt completion event
+            if self.progress_callback:
+                self.progress_callback(ProgressEvent(
+                    type=ProgressType.PROMPT_COMPLETE,
+                    message=f"Completed prompt: {self.prompt_name}",
+                    metadata={"prompt_name": self.prompt_name, "result_length": len(result)}
+                ))
+            
+            return result
+            
+        except Exception as e:
+            # Emit error event
+            if self.progress_callback:
+                self.progress_callback(ProgressEvent(
+                    type=ProgressType.PROMPT_ERROR,
+                    message=f"Error in prompt '{self.prompt_name}': {str(e)}",
+                    metadata={"prompt_name": self.prompt_name, "error_type": type(e).__name__}
+                ))
+            raise
 
     def completion_as_json(
         self,

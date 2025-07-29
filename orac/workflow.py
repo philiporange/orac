@@ -17,6 +17,7 @@ import networkx as nx
 
 from .logger import logger
 from .orac import Orac
+from .progress import ProgressCallback, ProgressEvent, ProgressType
 
 
 @dataclass
@@ -71,9 +72,11 @@ class WorkflowExecutionError(Exception):
 class WorkflowEngine:
     """Executes workflows by managing step dependencies and data flow."""
 
-    def __init__(self, workflow_spec: WorkflowSpec, prompts_dir: str = "prompts"):
+    def __init__(self, workflow_spec: WorkflowSpec, prompts_dir: str = "prompts", 
+                 progress_callback: Optional[ProgressCallback] = None):
         self.spec = workflow_spec
         self.prompts_dir = prompts_dir
+        self.progress_callback = progress_callback
         self.results: Dict[str, Dict[str, Any]] = {}
         self.graph = self._build_dependency_graph()
         self.execution_order = self._get_execution_order()
@@ -164,10 +167,21 @@ class WorkflowEngine:
         
         return context
 
-    def _execute_step(self, step_name: str, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _execute_step(self, step_name: str, context: Dict[str, Any], step_index: int = 0, total_steps: int = 0) -> Dict[str, Any]:
         """Execute a single workflow step."""
         logger.info(f"Executing workflow step: {step_name}")
         step = self.spec.steps[step_name]
+        
+        # Emit step start progress
+        if self.progress_callback:
+            self.progress_callback(ProgressEvent(
+                type=ProgressType.WORKFLOW_STEP_START,
+                message=f"Executing step: {step_name}",
+                current_step=step_index + 1,
+                total_steps=total_steps,
+                step_name=step_name,
+                metadata={"step_name": step_name, "prompt_name": step.prompt_name}
+            ))
         
         # Resolve input templates
         resolved_inputs = {}
@@ -178,7 +192,9 @@ class WorkflowEngine:
         
         # Execute the prompt
         try:
-            orac = Orac(step.prompt_name, prompts_dir=self.prompts_dir)
+            # Pass progress callback to Orac instance
+            orac = Orac(step.prompt_name, prompts_dir=self.prompts_dir,
+                       progress_callback=self.progress_callback)
             result = orac(**resolved_inputs)
             
             # Handle different result types
@@ -192,54 +208,119 @@ class WorkflowEngine:
                     step_results = {'result': result}
             
             logger.debug(f"Step '{step_name}' results: {step_results}")
+            
+            # Emit step completion progress
+            if self.progress_callback:
+                self.progress_callback(ProgressEvent(
+                    type=ProgressType.WORKFLOW_STEP_COMPLETE,
+                    message=f"Completed step: {step_name}",
+                    current_step=step_index + 1,
+                    total_steps=total_steps,
+                    step_name=step_name,
+                    metadata={"step_name": step_name, "result_keys": list(step_results.keys())}
+                ))
+            
             return step_results
             
         except Exception as e:
+            if self.progress_callback:
+                self.progress_callback(ProgressEvent(
+                    type=ProgressType.WORKFLOW_ERROR,
+                    message=f"Step '{step_name}' failed: {str(e)}",
+                    current_step=step_index + 1,
+                    total_steps=total_steps,
+                    step_name=step_name,
+                    metadata={"step_name": step_name, "error_type": type(e).__name__}
+                ))
             raise WorkflowExecutionError(f"Step '{step_name}' failed: {e}")
 
     def execute(self, inputs: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
         """Execute the workflow and return final outputs."""
         logger.info(f"Starting workflow execution: {self.spec.name}")
         
+        # Emit workflow start progress
+        if self.progress_callback:
+            self.progress_callback(ProgressEvent(
+                type=ProgressType.WORKFLOW_START,
+                message=f"Starting workflow: {self.spec.name}",
+                total_steps=len(self.execution_order),
+                metadata={
+                    "workflow_name": self.spec.name,
+                    "total_steps": len(self.execution_order),
+                    "execution_order": self.execution_order,
+                    "dry_run": dry_run
+                }
+            ))
+        
         if dry_run:
             logger.info(f"DRY RUN - Execution order: {' -> '.join(self.execution_order)}")
             return {}
         
-        # Validate inputs
-        self._validate_inputs(inputs)
-        
-        # Execute steps in dependency order
-        for step_name in self.execution_order:
-            context = self._build_context(inputs)
-            step_results = self._execute_step(step_name, context)
-            self.results[step_name] = step_results
-        
-        # Build final outputs
-        final_outputs = {}
-        for output in self.spec.outputs:
-            try:
-                parts = output.source.split('.')
-                if len(parts) != 2:
-                    raise WorkflowExecutionError(
-                        f"Invalid output source format '{output.source}'. Expected 'step.output'"
-                    )
-                
-                step_name, output_name = parts
-                if step_name not in self.results:
-                    raise WorkflowExecutionError(f"Output references unknown step '{step_name}'")
-                
-                if output_name not in self.results[step_name]:
-                    raise WorkflowExecutionError(
-                        f"Output '{output_name}' not found in step '{step_name}' results"
-                    )
-                
-                final_outputs[output.name] = self.results[step_name][output_name]
-                
-            except Exception as e:
-                raise WorkflowExecutionError(f"Failed to resolve output '{output.name}': {e}")
-        
-        logger.info(f"Workflow completed successfully with {len(final_outputs)} outputs")
-        return final_outputs
+        try:
+            # Validate inputs
+            self._validate_inputs(inputs)
+            
+            # Execute steps in dependency order
+            for i, step_name in enumerate(self.execution_order):
+                context = self._build_context(inputs)
+                step_results = self._execute_step(step_name, context, i, len(self.execution_order))
+                self.results[step_name] = step_results
+            
+            # Build final outputs
+            final_outputs = {}
+            for output in self.spec.outputs:
+                try:
+                    parts = output.source.split('.')
+                    if len(parts) != 2:
+                        raise WorkflowExecutionError(
+                            f"Invalid output source format '{output.source}'. Expected 'step.output'"
+                        )
+                    
+                    step_name, output_name = parts
+                    if step_name not in self.results:
+                        raise WorkflowExecutionError(f"Output references unknown step '{step_name}'")
+                    
+                    if output_name not in self.results[step_name]:
+                        raise WorkflowExecutionError(
+                            f"Output '{output_name}' not found in step '{step_name}' results"
+                        )
+                    
+                    final_outputs[output.name] = self.results[step_name][output_name]
+                    
+                except Exception as e:
+                    raise WorkflowExecutionError(f"Failed to resolve output '{output.name}': {e}")
+            
+            logger.info(f"Workflow completed successfully with {len(final_outputs)} outputs")
+            
+            # Emit workflow completion progress
+            if self.progress_callback:
+                self.progress_callback(ProgressEvent(
+                    type=ProgressType.WORKFLOW_COMPLETE,
+                    message=f"Completed workflow: {self.spec.name}",
+                    current_step=len(self.execution_order),
+                    total_steps=len(self.execution_order),
+                    metadata={
+                        "workflow_name": self.spec.name,
+                        "outputs": list(final_outputs.keys()),
+                        "total_steps_completed": len(self.execution_order)
+                    }
+                ))
+            
+            return final_outputs
+            
+        except Exception as e:
+            # Emit workflow error progress
+            if self.progress_callback:
+                self.progress_callback(ProgressEvent(
+                    type=ProgressType.WORKFLOW_ERROR,
+                    message=f"Workflow '{self.spec.name}' failed: {str(e)}",
+                    metadata={
+                        "workflow_name": self.spec.name,
+                        "error_type": type(e).__name__,
+                        "completed_steps": len(self.results)
+                    }
+                ))
+            raise
 
     def _validate_inputs(self, inputs: Dict[str, Any]) -> None:
         """Validate that required workflow inputs are provided."""

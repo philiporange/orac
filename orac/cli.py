@@ -15,6 +15,7 @@ from orac.config import Config
 from orac.orac import Orac
 from orac.chat import start_chat_interface
 from orac.workflow import load_workflow, WorkflowEngine, list_workflows, WorkflowValidationError, WorkflowExecutionError
+from orac.cli_progress import create_cli_reporter
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -416,7 +417,14 @@ def run_workflow_command(args):
     
     try:
         spec = load_workflow(workflow_path)
-        engine = WorkflowEngine(spec, prompts_dir=args.prompts_dir)
+        
+        # Create progress reporter if not quiet
+        progress_callback = None
+        if not getattr(args, 'quiet', False):
+            reporter = create_cli_reporter(verbose=args.verbose, quiet=getattr(args, 'quiet', False))
+            progress_callback = reporter.report
+        
+        engine = WorkflowEngine(spec, prompts_dir=args.prompts_dir, progress_callback=progress_callback)
         
         # Collect input values from CLI args
         inputs = {}
@@ -501,6 +509,9 @@ def run_workflow_interface():
     # Global flags
     parser.add_argument(
         "--verbose", "-v", action="store_true", help="Enable verbose logging output"
+    )
+    parser.add_argument(
+        "--quiet", "-q", action="store_true", help="Suppress progress output (only show errors)"
     )
     parser.add_argument(
         "--workflows-dir", default=Config.DEFAULT_WORKFLOWS_DIR, help="Directory where workflow YAML files live"
@@ -608,6 +619,9 @@ def run_prompt_interface():
     )
     pre_parser.add_argument(
         "--verbose", "-v", action="store_true", help="Enable verbose logging output"
+    )
+    pre_parser.add_argument(
+        "--quiet", "-q", action="store_true", help="Suppress progress output (only show errors)"
     )
     pre_args, remaining_argv = pre_parser.parse_known_args()
 
@@ -822,6 +836,13 @@ def run_prompt_interface():
     # Instantiate wrapper and call
     try:
         logger.debug("Creating Orac instance")
+        
+        # Create progress reporter if not quiet
+        progress_callback = None
+        if not getattr(args, 'quiet', False):
+            reporter = create_cli_reporter(verbose=args.verbose, quiet=getattr(args, 'quiet', False))
+            progress_callback = reporter.report
+        
         wrapper = Orac(
             prompt_name=args.prompt,
             prompts_dir=args.prompts_dir,
@@ -835,6 +856,7 @@ def run_prompt_interface():
             base_url=args.base_url,
             conversation_id=args.conversation_id,
             auto_save=not args.no_save,
+            progress_callback=progress_callback,
         )
 
         # Reset conversation if requested
