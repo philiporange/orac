@@ -1,0 +1,7 @@
+This is a sample text file for testing file upload functionality.
+It contains multiple lines of text to verify that file processing works correctly.
+
+Key points:
+- Line 1: Introduction
+- Line 2: Details
+- Line 3: Conclusion

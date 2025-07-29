@@ -1,0 +1,43 @@
+name: "Generate Bash from Documentation"
+description: "Summarize documentation then generate a bash command"
+
+# Workflow-level inputs (provided by user)
+inputs:
+  - name: documentation_path
+    type: string
+    description: "Path to documentation file"
+    required: true
+  - name: task_description
+    type: string
+    description: "What the bash command should do"
+    required: true
+
+# Workflow-level outputs (final results)
+outputs:
+  - name: bash_command
+    source: generate_bash.command
+    description: "The generated bash command"
+  - name: summary
+    source: summarize.analysis
+    description: "Summary of the documentation"
+
+# Prompt chain definition
+steps:
+  summarize:
+    prompt: file_test  # References orac/prompts/file_test.yaml
+    inputs:
+      # Pass the documentation file path as a file attachment
+      file: ${inputs.documentation_path}
+    outputs:
+      - analysis
+      - key_points
+
+  generate_bash:
+    prompt: bash  # References orac/prompts/bash.yaml
+    depends_on: [summarize]
+    inputs:
+      context: ${summarize.analysis}
+      task: ${inputs.task_description}
+    outputs:
+      - command
+      - explanation

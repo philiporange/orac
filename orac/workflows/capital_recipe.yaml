@@ -1,0 +1,41 @@
+name: "Capital City Recipe"
+description: "Get capital city and then suggest a traditional recipe from that country"
+
+inputs:
+  - name: country
+    type: string
+    description: "Name of the country"
+    required: true
+    default: "France"
+
+outputs:
+  - name: capital_city
+    source: get_capital.result
+    description: "The capital city"
+  - name: recipe_title
+    source: suggest_recipe.title
+    description: "Title of the traditional recipe"
+  - name: recipe_ingredients
+    source: suggest_recipe.ingredients
+    description: "List of ingredients for the recipe"
+  - name: recipe_steps
+    source: suggest_recipe.steps
+    description: "Cooking steps for the recipe"
+
+steps:
+  get_capital:
+    prompt: capital
+    inputs:
+      country: ${inputs.country}
+    outputs:
+      - result
+
+  suggest_recipe:
+    prompt: recipe
+    depends_on: [get_capital]
+    inputs:
+      dish: "traditional ${inputs.country} cuisine"
+    outputs:
+      - title
+      - ingredients
+      - steps

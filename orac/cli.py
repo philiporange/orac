@@ -14,6 +14,7 @@ from orac.logger import configure_console_logging
 from orac.config import Config
 from orac.orac import Orac
 from orac.chat import start_chat_interface
+from orac.workflow import load_workflow, WorkflowEngine, list_workflows, WorkflowValidationError, WorkflowExecutionError
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -305,7 +306,271 @@ def show_conversation_command(conversation_id: str):
         print(f"[{msg['timestamp']}] {role_label}:\n{msg['content']}\n")
 
 
+def add_workflow_input_argument(parser: argparse.ArgumentParser, workflow_input):
+    """Add a workflow input as a CLI argument."""
+    name = workflow_input.name
+    arg_name = f"--{name.replace('_', '-')}"
+    
+    help_parts = []
+    if workflow_input.description:
+        help_parts.append(workflow_input.description)
+    
+    help_parts.append(f"(type: {workflow_input.type})")
+    
+    if workflow_input.required and workflow_input.default is None:
+        help_parts.append("REQUIRED")
+    elif workflow_input.default is not None:
+        help_parts.append(f"default: {workflow_input.default}")
+    
+    help_text = " ".join(help_parts)
+    
+    cli_required = workflow_input.required and workflow_input.default is None
+    
+    parser.add_argument(
+        arg_name,
+        dest=name,
+        help=help_text,
+        required=cli_required,
+        default=None
+    )
+
+
+def list_workflows_command(workflows_dir: str):
+    """List available workflows."""
+    workflows = list_workflows(workflows_dir)
+    
+    if not workflows:
+        print(f"No workflows found in {workflows_dir}")
+        return
+    
+    print(f"\nAvailable workflows ({len(workflows)} total):")
+    print("-" * 80)
+    print(f"{'Name':20} {'Description':60}")
+    print("-" * 80)
+    
+    for workflow in workflows:
+        name = workflow['name']
+        desc = workflow['description'][:57] + "..." if len(workflow['description']) > 60 else workflow['description']
+        print(f"{name:20} {desc:60}")
+
+
+def show_workflow_info(workflows_dir: str, workflow_name: str):
+    """Show detailed information about a workflow."""
+    workflow_path = Path(workflows_dir) / f"{workflow_name}.yaml"
+    
+    try:
+        spec = load_workflow(workflow_path)
+    except WorkflowValidationError as e:
+        print(f"Error loading workflow: {e}", file=sys.stderr)
+        sys.exit(1)
+    
+    banner = f"Workflow: {spec.name}"
+    print(f"\n{banner}\n{'=' * len(banner)}")
+    
+    if spec.description:
+        print(f"Description: {spec.description}\n")
+    
+    if spec.inputs:
+        print(f"Inputs ({len(spec.inputs)}):")
+        for inp in spec.inputs:
+            status = "REQUIRED" if inp.required else "OPTIONAL"
+            print(f"  --{inp.name.replace('_', '-'):20} ({inp.type}) [{status}]")
+            if inp.description:
+                print(f"    {inp.description}")
+            if inp.default is not None:
+                print(f"    Default: {inp.default}")
+            print()
+    else:
+        print("No inputs defined.")
+    
+    if spec.outputs:
+        print(f"Outputs ({len(spec.outputs)}):")
+        for out in spec.outputs:
+            print(f"  {out.name:20} <- {out.source}")
+            if out.description:
+                print(f"    {out.description}")
+            print()
+    
+    if spec.steps:
+        print(f"Steps ({len(spec.steps)}):")
+        for step_name, step in spec.steps.items():
+            print(f"  {step_name:20} (prompt: {step.prompt_name})")
+            if step.depends_on:
+                print(f"    Depends on: {', '.join(step.depends_on)}")
+            print()
+    
+    # Example usage
+    example = [f"orac workflow {workflow_name}"]
+    for inp in spec.inputs:
+        if inp.required and inp.default is None:
+            flag = f"--{inp.name.replace('_', '-')}"
+            example.extend([flag, "'value'"])
+    print("Example usage:\n ", " ".join(example))
+
+
+def run_workflow_command(args):
+    """Execute a workflow."""
+    workflows_dir = args.workflows_dir
+    workflow_name = args.workflow_name
+    workflow_path = Path(workflows_dir) / f"{workflow_name}.yaml"
+    
+    try:
+        spec = load_workflow(workflow_path)
+        engine = WorkflowEngine(spec, prompts_dir=args.prompts_dir)
+        
+        # Collect input values from CLI args
+        inputs = {}
+        for workflow_input in spec.inputs:
+            cli_value = getattr(args, workflow_input.name, None)
+            if cli_value is not None:
+                # Convert CLI string to appropriate type
+                converted_value = convert_cli_value(cli_value, workflow_input.type, workflow_input.name)
+                inputs[workflow_input.name] = converted_value
+            elif workflow_input.default is not None:
+                inputs[workflow_input.name] = workflow_input.default
+        
+        logger.debug(f"Workflow inputs: {inputs}")
+        
+        # Execute workflow
+        results = engine.execute(inputs, dry_run=args.dry_run)
+        
+        if args.dry_run:
+            print("DRY RUN - Workflow execution plan:")
+            print(f"Execution order: {' -> '.join(engine.execution_order)}")
+            return
+        
+        # Output results
+        if args.output:
+            try:
+                with open(args.output, "w", encoding="utf-8") as f:
+                    if args.json_output:
+                        json.dump(results, f, indent=2)
+                    else:
+                        for name, value in results.items():
+                            f.write(f"{name}: {value}\n")
+                logger.info(f"Workflow output written to file: {args.output}")
+            except IOError as e:
+                logger.error(f"Error writing to output file '{args.output}': {e}")
+                print(f"Error writing to output file '{args.output}': {e}", file=sys.stderr)
+                sys.exit(1)
+        else:
+            if args.json_output:
+                print(json.dumps(results, indent=2))
+            else:
+                for name, value in results.items():
+                    print(f"{name}: {value}")
+        
+        logger.info("Workflow completed successfully")
+        
+    except (WorkflowValidationError, WorkflowExecutionError) as e:
+        logger.error(f"Workflow error: {e}")
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"Unexpected error running workflow: {e}")
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 def main():
+    # Check if we're using the new subcommand interface or legacy mode
+    # Legacy mode: first arg is prompt name (not 'workflow')
+    # New mode: first arg is 'workflow' 
+    
+    if len(sys.argv) > 1 and sys.argv[1] == "workflow":
+        # New workflow subcommand interface
+        run_workflow_interface()
+    else:
+        # Legacy prompt interface (backward compatibility)
+        run_prompt_interface()
+
+
+def run_workflow_interface():
+    """Handle workflow subcommand interface."""
+    # We need to handle the fact that 'workflow' might be in sys.argv
+    argv = sys.argv[1:]
+    if argv and argv[0] == 'workflow':
+        argv = argv[1:]
+
+    # Main parser
+    parser = argparse.ArgumentParser(
+        prog="orac workflow",
+        description="Execute workflows - chains of prompts with data flow"
+    )
+    
+    # Global flags
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable verbose logging output"
+    )
+    parser.add_argument(
+        "--workflows-dir", default=Config.DEFAULT_WORKFLOWS_DIR, help="Directory where workflow YAML files live"
+    )
+    parser.add_argument(
+        "--prompts-dir", default=Config.DEFAULT_PROMPTS_DIR, help="Directory where prompt YAML files live"
+    )
+
+    subparsers = parser.add_subparsers(dest='workflow_command', help='Workflow commands')
+    subparsers.required = True
+
+    # List command
+    list_parser = subparsers.add_parser('list', help='List available workflows')
+
+    # Run command parser
+    run_parser = subparsers.add_parser('run', help='Run a workflow')
+    run_parser.add_argument('workflow_name', nargs='?', default=None, help='Name of the workflow to run')
+    run_parser.add_argument('--info', action='store_true', help='Show workflow info')
+    run_parser.add_argument('--dry-run', action='store_true', help='Show execution plan only')
+    run_parser.add_argument('--output', '-o', help='Write output to file')
+    run_parser.add_argument('--json-output', action='store_true', help='Output results as JSON')
+
+    # Parse known args to find the workflow and add its params
+    args, remaining_argv = parser.parse_known_args(argv)
+
+    # Configure logging
+    configure_console_logging(verbose=args.verbose)
+
+    # If 'run' command, load workflow and add its arguments
+    if args.workflow_command == 'run' and args.workflow_name:
+        try:
+            workflow_path = Path(args.workflows_dir) / f"{args.workflow_name}.yaml"
+            if workflow_path.is_file():
+                spec = load_workflow(workflow_path)
+                for workflow_input in spec.inputs:
+                    add_workflow_input_argument(run_parser, workflow_input)
+            else:
+                if not any(h in remaining_argv for h in ['-h', '--help']):
+                     print(f"Error: Workflow '{args.workflow_name}' not found at: {workflow_path}", file=sys.stderr)
+                     sys.exit(1)
+
+        except WorkflowValidationError as e:
+            print(f"Error validating workflow '{args.workflow_name}': {e}", file=sys.stderr)
+            sys.exit(1)
+
+    # Re-parse all arguments now that the parser is fully configured
+    # Pass the original argv so that it can be parsed correctly from the start
+    args = parser.parse_args(argv)
+
+    # Execute command
+    if args.workflow_command == "list":
+        list_workflows_command(args.workflows_dir)
+        sys.exit(0)
+    elif args.workflow_command == "run":
+        if not args.workflow_name:
+            run_parser.print_help()
+            sys.exit(1)
+        if args.info:
+            show_workflow_info(args.workflows_dir, args.workflow_name)
+            sys.exit(0)
+        else:
+            run_workflow_command(args)
+            sys.exit(0)
+    else:
+        parser.print_help()
+        sys.exit(1)
+
+
+def run_prompt_interface():
+    """Handle legacy prompt interface (backward compatibility)."""
     # First pass: get prompt name and check for info request
     pre_parser = argparse.ArgumentParser(add_help=False)
     pre_parser.add_argument(
@@ -573,7 +838,7 @@ def main():
         )
 
         # Reset conversation if requested
-        if args.reset_conversation and args.conversation:
+        if args.reset_conversation and hasattr(args, 'conversation') and args.conversation:
             wrapper.reset_conversation()
             logger.info("Reset conversation history")
 

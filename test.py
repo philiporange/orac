@@ -177,7 +177,7 @@ def test_generation_config_and_model_override() -> None:
             "--country",
             "Brazil",
             "--model-name",
-            "gemini-1.5-flash",
+            "gemini-2.5-flash-lite",
             "--generation-config",
             override,
         ]
@@ -803,6 +803,12 @@ def main() -> None:
         test_conversation_cli()
         test_conversation_auto_id()
         test_conversation_disabled_by_default()
+
+        # Workflow tests
+        test_workflow_list_command()
+        test_workflow_info_command()
+        test_workflow_dry_run()
+        test_workflow_missing_validation()
 
         print("\n🎉  All tests passed!")
     except AssertionError as e:

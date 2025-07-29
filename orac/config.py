@@ -73,6 +73,9 @@ class Config:
     DEFAULT_PROMPTS_DIR: Final[Path] = Path(
         os.getenv("ORAC_DEFAULT_PROMPTS_DIR", PACKAGE_DIR / "prompts")
     )
+    DEFAULT_WORKFLOWS_DIR: Final[Path] = Path(
+        os.getenv("ORAC_DEFAULT_WORKFLOWS_DIR", PACKAGE_DIR / "workflows")
+    )
     DEFAULT_CONFIG_FILE: Final[Path] = Path(
         os.getenv("ORAC_DEFAULT_CONFIG_FILE", PACKAGE_DIR / "config.yaml")
     )
@@ -81,7 +84,7 @@ class Config:
     # LLM-client defaults                                                #
     # ------------------------------------------------------------------ #
     DEFAULT_MODEL_NAME: Final[str] = os.getenv(
-        "ORAC_DEFAULT_MODEL_NAME", "gemini-2.0-flash"
+        "ORAC_DEFAULT_MODEL_NAME", "gemini-2.5-flash-lite"
     )
 
     # ------------------------------------------------------------------ #

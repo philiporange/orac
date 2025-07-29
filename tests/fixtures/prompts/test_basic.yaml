@@ -1,0 +1,6 @@
+prompt: "This is a basic test prompt: ${message}"
+parameters:
+  - name: message
+    type: string
+    description: "Test message"
+    default: "hello world"

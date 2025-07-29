@@ -1,0 +1,9 @@
+# Testing framework and plugins
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.1
+pytest-env>=0.8.2
+pytest-xdist>=3.3.1
+
+# Additional testing utilities
+coverage>=7.2.0

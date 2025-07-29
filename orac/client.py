@@ -64,8 +64,16 @@ def _get_mime_type(file_path: str) -> str:
         "jpeg": "image/jpeg",
         "gif": "image/gif",
         "webp": "image/webp",
+        "txt": "text/plain",
+        "md": "text/markdown",
+        "py": "text/plain",
+        "js": "text/plain",
+        "json": "application/json",
+        "csv": "text/csv",
+        "html": "text/html",
+        "xml": "text/xml",
     }
-    return mime_types.get(ext, "application/octet-stream")
+    return mime_types.get(ext, "text/plain")
 
 
 def _gai_to_openai_messages(
@@ -115,16 +123,10 @@ def _gai_to_openai_messages(
                         {"type": "image_url", "image_url": {"url": data_url}}
                     )
                 else:
-                    # For non-image files, include filename and indicate it's attached
-                    # Note: Google hack to send pdfs as image_url type
+                    # For non-image files, use image_url type (Google API requirement)
+                    logger.debug(f"Sending {filename} ({mime_type}) as image_url type (Google API workaround)")
                     content.append(
-                        {
-                            "type": "file",
-                            "file": {
-                                "file_data": data_url,
-                                "filename": filename,
-                            },
-                        }
+                        {"type": "image_url", "image_url": {"url": data_url}}
                     )
             msgs.append({"role": "user", "content": content})
         else:

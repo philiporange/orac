@@ -9,6 +9,7 @@
 ## Features
 
 * **Prompt-as-config**: Define entire LLM tasks in YAML, including prompt text, parameters, default values, model settings, and file attachments.
+* **Workflow orchestration**: Chain multiple prompts together with data flow and dependency management. Perfect for complex multi-step AI workflows.
 * **Hierarchical configuration**: Three-layer config system (base → prompt → runtime) with deep merging for flexible overrides.
 * **Templated inputs**: Use `${variable}` placeholders in prompt and system prompt fields.
 * **File support**: Attach local or remote files (e.g., images, documents) via `files:` or `file_urls:` in YAML or CLI flags.
@@ -277,6 +278,115 @@ chat.reset_conversation()
 # Override conversation mode (even if YAML enables it)
 single_shot = Orac("chat", use_conversation=False)
 print(single_shot("One-time question"))    # No conversation context
+```
+
+### 6. Workflows
+
+Orac supports **workflows** - chains of prompts that execute in sequence with data flowing between steps. This enables complex multi-step AI operations like research → analysis → report generation.
+
+#### Basic Workflow Usage
+
+```bash
+# List available workflows
+orac workflow list
+
+# Show workflow details
+orac workflow run research_assistant --info
+
+# Execute a workflow
+orac workflow run capital_recipe --country Italy
+
+# Dry run (show execution plan without running)
+orac workflow run research_assistant --topic "AI ethics" --dry-run
+```
+
+#### Creating Workflow YAML Files
+
+Workflows are defined in YAML files in the `workflows/` directory:
+
+```yaml
+# workflows/capital_recipe.yaml
+name: "Capital City Recipe"
+description: "Get capital city and suggest a traditional recipe"
+
+inputs:
+  - name: country
+    type: string
+    description: "Name of the country"
+    required: true
+
+outputs:
+  - name: capital_city
+    source: get_capital.result
+  - name: traditional_dish
+    source: suggest_recipe.result
+
+steps:
+  get_capital:
+    prompt: capital
+    inputs:
+      country: ${inputs.country}
+    outputs:
+      - result
+
+  suggest_recipe:
+    prompt: recipe
+    depends_on: [get_capital]
+    inputs:
+      dish: "traditional ${inputs.country} cuisine"
+    outputs:
+      - result
+```
+
+#### Workflow Features
+
+- **Dependency Management**: Steps run in topological order based on `depends_on` or data flow
+- **Template Variables**: Use `${inputs.param}` and `${step_name.output}` for dynamic values
+- **Error Handling**: Comprehensive validation and error reporting
+- **Dry Run Mode**: Preview execution plan without running prompts
+- **JSON Output**: `--json-output` formats results as structured JSON
+
+#### Complex Workflow Example
+
+```yaml
+# workflows/research_assistant.yaml
+name: "Research Assistant"
+description: "Multi-step research with analysis and summary"
+
+inputs:
+  - name: topic
+    type: string
+    required: true
+  - name: focus_area
+    type: string
+    default: "general overview"
+
+outputs:
+  - name: research_summary
+    source: final_report.result
+  - name: key_insights
+    source: analyze_findings.insights
+
+steps:
+  initial_research:
+    prompt: chat
+    inputs:
+      message: "Research ${inputs.topic}, focusing on ${inputs.focus_area}"
+    outputs: [result]
+
+  analyze_findings:
+    prompt: chat
+    depends_on: [initial_research]
+    inputs:
+      message: "Analyze these findings: ${initial_research.result}"
+    outputs: [insights, conclusions]
+
+  final_report:
+    prompt: chat
+    depends_on: [analyze_findings]
+    inputs:
+      message: "Create a report on ${inputs.topic}: ${analyze_findings.insights}"
+    outputs: [result]
 ```
 
 ---

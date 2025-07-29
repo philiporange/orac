@@ -1,0 +1,46 @@
+name: "Research Assistant"
+description: "Multi-step research workflow with analysis and summary"
+
+inputs:
+  - name: topic
+    type: string
+    description: "Research topic or question"
+    required: true
+  - name: focus_area
+    type: string
+    description: "Specific area to focus on"
+    required: false
+    default: "general overview"
+
+outputs:
+  - name: research_summary
+    source: final_report.result
+    description: "Comprehensive research summary"
+  - name: key_insights
+    source: analyze_findings.insights
+    description: "Key insights from research"
+
+steps:
+  initial_research:
+    prompt: chat
+    inputs:
+      message: "Research the topic: ${inputs.topic}. Focus on ${inputs.focus_area}. Provide detailed information."
+    outputs:
+      - result
+
+  analyze_findings:
+    prompt: chat
+    depends_on: [initial_research]
+    inputs:
+      message: "Analyze these research findings and extract key insights: ${initial_research.result}"
+    outputs:
+      - insights
+      - conclusions
+
+  final_report:
+    prompt: chat
+    depends_on: [analyze_findings]
+    inputs:
+      message: "Create a comprehensive research report on ${inputs.topic} based on this analysis: ${analyze_findings.insights}. Include conclusions and recommendations."
+    outputs:
+      - result
