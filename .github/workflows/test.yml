@@ -28,14 +28,20 @@ jobs:
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
     
-    - name: Run unit tests
-      run: python run_tests.py --unit --coverage
+    - name: Run quick unit tests
+      run: python run_tests.py --unit --quick --parallel 2
+      env:
+        ORAC_LLM_PROVIDER: google
+        GOOGLE_API_KEY: fake_test_key
+    
+    - name: Run all unit tests with coverage
+      run: python run_tests.py --unit --coverage --parallel 2
       env:
         ORAC_LLM_PROVIDER: google
         GOOGLE_API_KEY: fake_test_key
     
     - name: Run integration tests
-      run: python run_tests.py --integration
+      run: python run_tests.py --integration --parallel 2
       env:
         ORAC_LLM_PROVIDER: google
         GOOGLE_API_KEY: fake_test_key
@@ -49,7 +55,10 @@ jobs:
     
     - name: Generate coverage report
       if: matrix.python-version == '3.11'
-      run: python run_tests.py --html-coverage
+      run: |
+        python run_tests.py --unit --html-coverage --parallel 2
+        # Generate XML coverage report for Codecov
+        pytest --cov=orac --cov-report=xml tests/test_unit
       env:
         ORAC_LLM_PROVIDER: google
         GOOGLE_API_KEY: fake_test_key
@@ -77,6 +86,15 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+    
+    - name: Validate test structure
+      run: |
+        echo "Validating test structure and markers..."
+        pytest --collect-only --quiet tests/
+        echo "Test structure validation passed"
+      env:
+        ORAC_LLM_PROVIDER: google
+        GOOGLE_API_KEY: fake_test_key
     
     - name: Run legacy tests
       run: |
