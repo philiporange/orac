@@ -2,7 +2,7 @@
 Progress tracking infrastructure for Orac operations.
 
 This module provides a callback-based progress tracking system that allows
-users to monitor the execution of prompts and workflows without affecting
+users to monitor the execution of prompts and flows without affecting
 the core functionality.
 """
 from __future__ import annotations
@@ -21,12 +21,12 @@ class ProgressType(Enum):
     PROMPT_COMPLETE = "prompt_complete" 
     PROMPT_ERROR = "prompt_error"
     
-    # Workflow events
-    WORKFLOW_START = "workflow_start"
-    WORKFLOW_STEP_START = "workflow_step_start"
-    WORKFLOW_STEP_COMPLETE = "workflow_step_complete"
-    WORKFLOW_COMPLETE = "workflow_complete"
-    WORKFLOW_ERROR = "workflow_error"
+    # Flow events
+    FLOW_START = "flow_start"
+    FLOW_STEP_START = "flow_step_start"
+    FLOW_STEP_COMPLETE = "flow_step_complete"
+    FLOW_COMPLETE = "flow_complete"
+    FLOW_ERROR = "flow_error"
     
     # API and file operation events
     API_REQUEST_START = "api_request_start"
@@ -111,8 +111,8 @@ class ProgressTracker:
         if event.type in (
             ProgressType.PROMPT_COMPLETE,
             ProgressType.PROMPT_ERROR,
-            ProgressType.WORKFLOW_COMPLETE,
-            ProgressType.WORKFLOW_ERROR
+            ProgressType.FLOW_COMPLETE,
+            ProgressType.FLOW_ERROR
         ):
             self.end_time = event.timestamp
     
@@ -171,25 +171,25 @@ def create_simple_callback(verbose: bool = False) -> ProgressCallback:
     def callback(event: ProgressEvent) -> None:
         timestamp = event.timestamp.strftime("%H:%M:%S") if event.timestamp else "??:??:??"
         
-        if event.type == ProgressType.WORKFLOW_START:
+        if event.type == ProgressType.FLOW_START:
             print(f"🚀 {timestamp} - {event.message}")
             if event.total_steps:
                 print(f"   Total steps: {event.total_steps}")
         
-        elif event.type == ProgressType.WORKFLOW_STEP_START:
+        elif event.type == ProgressType.FLOW_STEP_START:
             if event.current_step and event.total_steps:
                 progress = f"[{event.current_step}/{event.total_steps}]"
                 print(f"📝 {timestamp} - {progress} {event.message}")
             else:
                 print(f"📝 {timestamp} - {event.message}")
         
-        elif event.type == ProgressType.WORKFLOW_STEP_COMPLETE:
+        elif event.type == ProgressType.FLOW_STEP_COMPLETE:
             print(f"✅ {timestamp} - Step completed: {event.step_name or 'unknown'}")
         
-        elif event.type == ProgressType.WORKFLOW_COMPLETE:
+        elif event.type == ProgressType.FLOW_COMPLETE:
             print(f"🎉 {timestamp} - {event.message}")
         
-        elif event.type in (ProgressType.PROMPT_ERROR, ProgressType.WORKFLOW_ERROR):
+        elif event.type in (ProgressType.PROMPT_ERROR, ProgressType.FLOW_ERROR):
             print(f"❌ {timestamp} - {event.message}")
         
         elif verbose and event.type == ProgressType.PROMPT_START:

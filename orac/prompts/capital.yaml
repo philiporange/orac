@@ -1,3 +1,4 @@
+description: "Get the capital city of any country with a concise, factual response"
 model_name: "gemini-2.5-flash-lite"
 generation_config:
     temperature: 0

@@ -1,5 +1,5 @@
 """
-Unit tests for progress tracking integration with Orac and WorkflowEngine.
+Unit tests for progress tracking integration with Orac and FlowEngine.
 
 These tests focus on testing the progress callback integration without
 requiring actual API calls or file system operations.
@@ -10,7 +10,7 @@ from pathlib import Path
 
 from orac.progress import ProgressEvent, ProgressType, ProgressTracker
 from orac.orac import Orac
-from orac.workflow import WorkflowEngine, WorkflowSpec, WorkflowStep, WorkflowInput, WorkflowOutput
+from orac.flow import FlowEngine, WorkflowSpec, WorkflowStep, WorkflowInput, WorkflowOutput
 
 
 class TestOracProgressIntegrationUnit:
@@ -149,14 +149,14 @@ class TestOracProgressIntegrationUnit:
         assert start_event.metadata["params"]["another_param"] == 42
 
 
-class TestWorkflowEngineProgressUnit:
-    """Unit tests for progress tracking in WorkflowEngine."""
+class TestFlowEngineProgressUnit:
+    """Unit tests for progress tracking in FlowEngine."""
     
-    def create_test_workflow_spec(self):
-        """Create a simple test workflow spec."""
+    def create_test_flow_spec(self):
+        """Create a simple test flow spec."""
         return WorkflowSpec(
-            name="test_workflow",
-            description="Test workflow",
+            name="test_flow",
+            description="Test flow",
             inputs=[
                 WorkflowInput(name="input1", type="string", required=True)
             ],
@@ -174,51 +174,51 @@ class TestWorkflowEngineProgressUnit:
         )
     
     @pytest.mark.unit
-    def test_workflow_engine_progress_callback_parameter(self):
-        """Test that WorkflowEngine accepts progress_callback parameter."""
-        spec = self.create_test_workflow_spec()
+    def test_flow_engine_progress_callback_parameter(self):
+        """Test that FlowEngine accepts progress_callback parameter."""
+        spec = self.create_test_flow_spec()
         mock_callback = Mock()
         
-        engine = WorkflowEngine(spec, progress_callback=mock_callback)
+        engine = FlowEngine(spec, progress_callback=mock_callback)
         
         assert engine.progress_callback == mock_callback
     
     @pytest.mark.unit
-    def test_workflow_engine_progress_callback_none_by_default(self):
+    def test_flow_engine_progress_callback_none_by_default(self):
         """Test that progress_callback defaults to None."""
-        spec = self.create_test_workflow_spec()
+        spec = self.create_test_flow_spec()
         
-        engine = WorkflowEngine(spec)
+        engine = FlowEngine(spec)
         
         assert engine.progress_callback is None
     
     @pytest.mark.unit
-    @patch('orac.workflow.Orac')
-    def test_workflow_engine_progress_events_dry_run(self, mock_orac_class):
-        """Test workflow progress events in dry run mode."""
-        spec = self.create_test_workflow_spec()
+    @patch('orac.flow.Orac')
+    def test_flow_engine_progress_events_dry_run(self, mock_orac_class):
+        """Test flow progress events in dry run mode."""
+        spec = self.create_test_flow_spec()
         mock_callback = Mock()
         
-        engine = WorkflowEngine(spec, progress_callback=mock_callback)
+        engine = FlowEngine(spec, progress_callback=mock_callback)
         
         # Dry run should only emit start event
         result = engine.execute({"input1": "test"}, dry_run=True)
         
         assert result == {}
         
-        # Should emit workflow start event
+        # Should emit flow start event
         mock_callback.assert_called_once()
         event = mock_callback.call_args[0][0]
-        assert event.type == ProgressType.WORKFLOW_START
-        assert "test_workflow" in event.message
+        assert event.type == ProgressType.FLOW_START
+        assert "test_flow" in event.message
         assert event.total_steps == 1
         assert event.metadata["dry_run"] is True
     
     @pytest.mark.unit
-    @patch('orac.workflow.Orac')
-    def test_workflow_engine_progress_events_full_flow(self, mock_orac_class):
-        """Test workflow progress events for full execution."""
-        spec = self.create_test_workflow_spec()
+    @patch('orac.flow.Orac')
+    def test_flow_engine_progress_events_full_flow(self, mock_orac_class):
+        """Test flow progress events for full execution."""
+        spec = self.create_test_flow_spec()
         mock_callback = Mock()
         
         # Mock Orac instance
@@ -226,7 +226,7 @@ class TestWorkflowEngineProgressUnit:
         mock_orac_instance.return_value = "step1_result"
         mock_orac_class.return_value = mock_orac_instance
         
-        engine = WorkflowEngine(spec, progress_callback=mock_callback)
+        engine = FlowEngine(spec, progress_callback=mock_callback)
         
         result = engine.execute({"input1": "test_input"})
         
@@ -237,23 +237,23 @@ class TestWorkflowEngineProgressUnit:
         calls = mock_callback.call_args_list
         events = [call[0][0] for call in calls]
         
-        # Should have: workflow_start, step_start, step_complete, workflow_complete
+        # Should have: flow_start, step_start, step_complete, flow_complete
         event_types = [e.type for e in events]
         
-        assert ProgressType.WORKFLOW_START in event_types
-        assert ProgressType.WORKFLOW_STEP_START in event_types
-        assert ProgressType.WORKFLOW_STEP_COMPLETE in event_types
-        assert ProgressType.WORKFLOW_COMPLETE in event_types
+        assert ProgressType.FLOW_START in event_types
+        assert ProgressType.FLOW_STEP_START in event_types
+        assert ProgressType.FLOW_STEP_COMPLETE in event_types
+        assert ProgressType.FLOW_COMPLETE in event_types
         
-        # Check workflow start event
-        start_events = [e for e in events if e.type == ProgressType.WORKFLOW_START]
+        # Check flow start event
+        start_events = [e for e in events if e.type == ProgressType.FLOW_START]
         assert len(start_events) == 1
         start_event = start_events[0]
         assert start_event.total_steps == 1
-        assert start_event.metadata["workflow_name"] == "test_workflow"
+        assert start_event.metadata["flow_name"] == "test_flow"
         
         # Check step start event
-        step_start_events = [e for e in events if e.type == ProgressType.WORKFLOW_STEP_START]
+        step_start_events = [e for e in events if e.type == ProgressType.FLOW_STEP_START]
         assert len(step_start_events) == 1
         step_start_event = step_start_events[0]
         assert step_start_event.current_step == 1
@@ -261,22 +261,22 @@ class TestWorkflowEngineProgressUnit:
         assert step_start_event.step_name == "step1"
         
         # Check step complete event
-        step_complete_events = [e for e in events if e.type == ProgressType.WORKFLOW_STEP_COMPLETE]
+        step_complete_events = [e for e in events if e.type == ProgressType.FLOW_STEP_COMPLETE]
         assert len(step_complete_events) == 1
         step_complete_event = step_complete_events[0]
         assert step_complete_event.step_name == "step1"
         
-        # Check workflow complete event
-        complete_events = [e for e in events if e.type == ProgressType.WORKFLOW_COMPLETE]
+        # Check flow complete event
+        complete_events = [e for e in events if e.type == ProgressType.FLOW_COMPLETE]
         assert len(complete_events) == 1
         complete_event = complete_events[0]
-        assert complete_event.metadata["workflow_name"] == "test_workflow"
+        assert complete_event.metadata["flow_name"] == "test_flow"
     
     @pytest.mark.unit
-    @patch('orac.workflow.Orac')
-    def test_workflow_engine_progress_error_handling(self, mock_orac_class):
-        """Test workflow progress error handling."""
-        spec = self.create_test_workflow_spec()
+    @patch('orac.flow.Orac')
+    def test_flow_engine_progress_error_handling(self, mock_orac_class):
+        """Test flow progress error handling."""
+        spec = self.create_test_flow_spec()
         mock_callback = Mock()
         
         # Mock Orac to raise an exception
@@ -284,16 +284,16 @@ class TestWorkflowEngineProgressUnit:
         mock_orac_instance.side_effect = RuntimeError("Step failed")
         mock_orac_class.return_value = mock_orac_instance
         
-        engine = WorkflowEngine(spec, progress_callback=mock_callback)
+        engine = FlowEngine(spec, progress_callback=mock_callback)
         
-        with pytest.raises(Exception):  # WorkflowExecutionError wraps the RuntimeError
+        with pytest.raises(Exception):  # FlowExecutionError wraps the RuntimeError
             engine.execute({"input1": "test_input"})
         
-        # Verify error events were emitted (step error + workflow error)
+        # Verify error events were emitted (step error + flow error)
         calls = mock_callback.call_args_list
         events = [call[0][0] for call in calls]
         
-        error_events = [e for e in events if e.type == ProgressType.WORKFLOW_ERROR]
+        error_events = [e for e in events if e.type == ProgressType.FLOW_ERROR]
         assert len(error_events) >= 1  # At least one error event
         
         # First error should be the step error
@@ -303,17 +303,17 @@ class TestWorkflowEngineProgressUnit:
         assert step_error.step_name == "step1"
     
     @pytest.mark.unit
-    @patch('orac.workflow.Orac')
-    def test_workflow_engine_passes_progress_callback_to_orac(self, mock_orac_class):
-        """Test that WorkflowEngine passes progress callback to Orac instances."""
-        spec = self.create_test_workflow_spec()
+    @patch('orac.flow.Orac')
+    def test_flow_engine_passes_progress_callback_to_orac(self, mock_orac_class):
+        """Test that FlowEngine passes progress callback to Orac instances."""
+        spec = self.create_test_flow_spec()
         mock_callback = Mock()
         
         mock_orac_instance = Mock()
         mock_orac_instance.return_value = "result"
         mock_orac_class.return_value = mock_orac_instance
         
-        engine = WorkflowEngine(spec, progress_callback=mock_callback)
+        engine = FlowEngine(spec, progress_callback=mock_callback)
         engine.execute({"input1": "test"})
         
         # Verify Orac was created with progress callback
@@ -325,12 +325,12 @@ class TestWorkflowEngineProgressUnit:
         assert call_args.kwargs['progress_callback'] == mock_callback
     
     @pytest.mark.unit
-    @patch('orac.workflow.Orac')
-    def test_workflow_engine_multi_step_progress(self, mock_orac_class):
-        """Test progress tracking for multi-step workflow."""
-        # Create multi-step workflow
+    @patch('orac.flow.Orac')
+    def test_flow_engine_multi_step_progress(self, mock_orac_class):
+        """Test progress tracking for multi-step flow."""
+        # Create multi-step flow
         spec = WorkflowSpec(
-            name="multi_step_workflow",
+            name="multi_step_flow",
             description="Multi-step test",
             inputs=[WorkflowInput(name="input1", type="string", required=True)],
             outputs=[WorkflowOutput(name="final_output", source="step2.result")],
@@ -358,7 +358,7 @@ class TestWorkflowEngineProgressUnit:
         mock_orac_instance.side_effect = ["step1_result", "step2_result"]
         mock_orac_class.return_value = mock_orac_instance
         
-        engine = WorkflowEngine(spec, progress_callback=mock_callback)
+        engine = FlowEngine(spec, progress_callback=mock_callback)
         result = engine.execute({"input1": "test"})
         
         assert result == {"final_output": "step2_result"}
@@ -367,8 +367,8 @@ class TestWorkflowEngineProgressUnit:
         calls = mock_callback.call_args_list
         events = [call[0][0] for call in calls]
         
-        step_start_events = [e for e in events if e.type == ProgressType.WORKFLOW_STEP_START]
-        step_complete_events = [e for e in events if e.type == ProgressType.WORKFLOW_STEP_COMPLETE]
+        step_start_events = [e for e in events if e.type == ProgressType.FLOW_STEP_START]
+        step_complete_events = [e for e in events if e.type == ProgressType.FLOW_STEP_COMPLETE]
         
         assert len(step_start_events) == 2
         assert len(step_complete_events) == 2
@@ -403,7 +403,7 @@ class TestProgressCallbackInterfaceUnit:
         tracker = ProgressTracker()
         
         # Should work as a callback
-        event = ProgressEvent(ProgressType.WORKFLOW_START, "Starting")
+        event = ProgressEvent(ProgressType.FLOW_START, "Starting")
         tracker.track(event)
         
         assert len(tracker.events) == 1
@@ -446,8 +446,8 @@ class TestProgressMetadataUnit:
             "file_count": 0
         }
         
-        workflow_metadata = {
-            "workflow_name": "data_analysis",
+        flow_metadata = {
+            "flow_name": "data_analysis",
             "step_name": "preprocessing",
             "step_index": 1,
             "total_steps": 5,
@@ -465,7 +465,7 @@ class TestProgressMetadataUnit:
         
         events = [
             ProgressEvent(ProgressType.PROMPT_START, "Test", metadata=prompt_metadata),
-            ProgressEvent(ProgressType.WORKFLOW_STEP_START, "Test", metadata=workflow_metadata),
+            ProgressEvent(ProgressType.FLOW_STEP_START, "Test", metadata=flow_metadata),
             ProgressEvent(ProgressType.API_REQUEST_START, "Test", metadata=api_metadata)
         ]
         

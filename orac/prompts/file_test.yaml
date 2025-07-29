@@ -1,3 +1,4 @@
+description: "Analyze and describe the content of attached files"
 prompt: |
     Describe the content of the attached file. Provide a brief summary of what you can see or read.
 parameters: []

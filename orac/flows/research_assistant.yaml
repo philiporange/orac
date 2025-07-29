@@ -1,5 +1,5 @@
 name: "Research Assistant"
-description: "Multi-step research workflow with analysis and summary"
+description: "Multi-step research flow with analysis and summary"
 
 inputs:
   - name: topic

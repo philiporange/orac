@@ -2,36 +2,145 @@
 
 ![Orac Logo](assets/orac_logo.png)
 
-**Orac** is a lightweight, YAML-driven framework for working with OpenAI-compatible LLM APIs. It provides clean abstractions, command-line integration, structured parameter handling, and support for both local and remote file attachments.
+**Orac** is a lightweight, YAML-driven framework for working with OpenAI-compatible LLM APIs. It provides clean abstractions, intuitive command-line interface, structured parameter handling, and support for both local and remote file attachments.
 
 ---
 
 ## Features
 
 * **Prompt-as-config**: Define entire LLM tasks in YAML, including prompt text, parameters, default values, model settings, and file attachments.
-* **Workflow orchestration**: Chain multiple prompts together with data flow and dependency management. Perfect for complex multi-step AI workflows.
+* **Flow orchestration**: Chain multiple prompts together with data flow and dependency management. Perfect for complex multi-step AI workflows.
 * **Hierarchical configuration**: Three-layer config system (base → prompt → runtime) with deep merging for flexible overrides.
 * **Templated inputs**: Use `${variable}` placeholders in prompt and system prompt fields.
 * **File support**: Attach local or remote files (e.g., images, documents) via `files:` or `file_urls:` in YAML or CLI flags.
 * **Conversation mode**: Automatic context preservation with SQLite-based history. Enable with `conversation: true` in YAML for seamless multi-turn interactions.
-* **Command-line and Python API**: Use either the CLI tool or the `LLMWrapper` class in code.
+* **Intuitive CLI**: Modern resource-action command structure with excellent discoverability and help system.
+* **Python API**: Full programmatic access via the `Orac` class for integration into applications.
 * **Runtime configuration overrides**: Override model settings, API keys, generation options, and safety filters from the CLI or programmatically.
 * **Structured output support**: Request `application/json` responses or validate against a JSON Schema.
 * **Parameter validation**: Automatically convert and validate inputs by type.
-* **Logging**: Logs all operations to file and provides optional verbose console output.
+* **Comprehensive logging**: Logs all operations to file and provides optional verbose console output.
 
 ---
 
-## Installation
+## Quick Start
 
-### Option 1: Using requirements.txt
+### Installation
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### Option 2: Manual installation
+### Setup
+
+1. **Set your LLM provider and API key**:
+   ```bash
+   export ORAC_LLM_PROVIDER=google
+   export GOOGLE_API_KEY=your_api_key_here
+   ```
+
+2. **Run your first prompt**:
+   ```bash
+   orac prompt run capital --country France
+   # Output: Paris
+   ```
+
+3. **Discover what's available**:
+   ```bash
+   orac prompt list        # List all available prompts
+   orac flow list          # List all available flows
+   orac --help             # Show all commands
+   ```
+
+---
+
+## Command Structure
+
+Orac uses an intuitive **resource-action** pattern that makes commands predictable and discoverable:
+
 ```bash
-pip install google-generativeai openai PyYAML python-dotenv loguru
+orac <resource> <action> [arguments] [flags]
+```
+
+### Core Resources
+
+#### **Prompts** - Single AI interactions
+```bash
+# Execute prompts
+orac prompt run capital --country France
+orac prompt run recipe --dish cookies --json-output
+
+# Discover and explore prompts  
+orac prompt list                        # List all available prompts
+orac prompt show capital                # Show prompt details & parameters
+orac prompt validate capital            # Validate prompt YAML
+```
+
+#### **Flows** - Multi-step AI workflows
+```bash
+# Execute flows (formerly called workflows)
+orac flow run research_assistant --topic "AI ethics"
+orac flow run capital_recipe --country Italy
+
+# Discover and explore flows
+orac flow list                          # List all flows
+orac flow show research_assistant       # Show flow structure
+orac flow graph research_assistant      # Show dependency graph
+orac flow test research_assistant       # Dry-run validation
+```
+
+#### **Chat** - Interactive conversations
+```bash
+# Interactive conversations
+orac chat send "What is machine learning?"
+orac chat send "Give me an example" --conversation-id work
+
+# Interactive curses-based chat interface
+orac chat interactive                   # Start interactive chat with curses UI
+orac chat interactive --conversation-id work  # Continue specific conversation
+
+# Conversation management
+orac chat list                          # List all conversations
+orac chat show work                     # Show conversation history
+orac chat delete work                   # Delete conversation
+```
+
+#### **Configuration** - System management
+```bash
+# Configuration
+orac config show                        # Show current configuration
+orac config set provider google         # Set default provider
+orac config set model gemini-2.0-flash  # Set default model
+
+# Authentication
+orac auth login google                  # Set up Google API key
+orac auth status                        # Show auth status
+```
+
+#### **Global Discovery**
+```bash
+# Discover everything
+orac list                              # List all prompts and flows
+orac search "image"                    # Search by keyword
+orac --help                            # Show all available commands
+```
+
+### Command Shortcuts
+
+For frequently used operations, Orac provides convenient shortcuts:
+
+```bash
+# Shortcut aliases (optional, for power users)
+orac run capital --country France      # → orac prompt run capital --country France
+orac flow research --topic AI          # → orac flow run research --topic AI
+orac ask "hello"                       # → orac chat send "hello"
+orac interactive                       # → orac chat interactive
+
+# Ultra-short aliases for power users
+orac r capital --country France        # → orac prompt run capital --country France
+orac f research --topic AI             # → orac flow run research --topic AI
+orac c "hello"                         # → orac chat send "hello"
+orac i                                 # → orac chat interactive
 ```
 
 ---
@@ -84,74 +193,25 @@ Orac supports configuration through environment variables. You can either set th
 # Using Google Gemini
 export ORAC_LLM_PROVIDER=google
 export GOOGLE_API_KEY=your_google_api_key
-python -m orac capital --country France
+orac prompt run capital --country France
 
 # Using OpenAI
 export ORAC_LLM_PROVIDER=openai
 export OPENAI_API_KEY=your_openai_api_key
-python -m orac capital --country Spain
-
-# Using OpenRouter (access to multiple models)
-export ORAC_LLM_PROVIDER=openrouter
-export OPENROUTER_API_KEY=your_openrouter_api_key
-python -m orac capital --country Japan
+orac prompt run capital --country Spain
 
 # Using CLI flags instead of environment variables
-python -m orac capital --provider google --api-key your_api_key --country Italy
+orac prompt run capital --provider google --api-key your_api_key --country Italy
 
 # Using a custom endpoint
-python -m orac capital --provider custom --base-url https://my-custom-api.com/v1/ --api-key your_key --country Germany
+orac prompt run capital --provider custom --base-url https://my-custom-api.com/v1/ --api-key your_key --country Germany
 ```
-
-### Configurable Environment Variables
-
-All default settings can be overridden with environment variables using the `ORAC_` prefix:
-
-- `ORAC_LLM_PROVIDER` - **Required**: LLM provider selection (google|openai|anthropic|azure|openrouter|custom)
-- `ORAC_DEFAULT_MODEL_NAME` - Default LLM model
-- `ORAC_DEFAULT_PROMPTS_DIR` - Directory for prompt files
-- `ORAC_DEFAULT_CONFIG_FILE` - Path to config YAML
-- `ORAC_DOWNLOAD_DIR` - Temp directory for file downloads
-- `ORAC_LOG_FILE` - Log file location
-
-### Configuration Hierarchy
-
-Orac uses a layered configuration system, allowing for flexible and powerful control over your prompts. Settings are resolved with the following order of precedence (where higher numbers override lower ones):
-
-1.  **Base Configuration (`orac/config.yaml`)**: The default settings for the entire project. This file is included with the `orac` package and provides sensible defaults for `model_name`, `generation_config`, and `safety_settings`. You can edit it directly in your site-packages or provide your own via a custom script.
-
-2.  **Prompt Configuration (`prompts/your_prompt.yaml`)**: Any setting defined in a specific prompt's YAML file will override the base configuration. This is the primary way to customize a single task. For example, you can set a lower `temperature` for a factual prompt or a different `model_name` for a complex one.
-
-3.  **Runtime Overrides (CLI / Python API)**: Settings provided directly at runtime, such as using the `--model-name` flag in the CLI or passing the `generation_config` dictionary to the `Orac` constructor, will always take the highest precedence, overriding all other configurations.
-
-#### Example Override
-
-If `orac/config.yaml` has:
-
-```yaml
-# orac/config.yaml
-generation_config:
-  temperature: 0.7
-```
-
-And your prompt has:
-
-```yaml
-# prompts/recipe.yaml
-prompt: "Give me a recipe for ${dish}"
-generation_config:
-  temperature: 0.2  # Override for more deterministic recipes
-```
-
-Running `orac recipe` will use a temperature of **0.2**.
-
-Running `orac recipe --generation-config '{"temperature": 0.9}'` will use a temperature of **0.9**.
 
 ---
 
 ## Example Usage
 
-### 1. Basic YAML prompt
+### 1. Basic Prompt Execution
 
 Save the following to `prompts/capital.yaml`:
 
@@ -163,26 +223,96 @@ parameters:
     default: France
 ```
 
-### 1b. Conversation-enabled prompt
+Then run:
 
-Orac includes a built-in `chat.yaml` prompt for conversational interactions:
+```bash
+orac prompt run capital                    # Uses default: France → "Paris"
+orac prompt run capital --country Japan    # → "Tokyo"
+orac prompt show capital                   # Show prompt details
+```
+
+### 2. Interactive Conversations
+
+Orac includes built-in conversation support:
 
 ```bash
 # These automatically maintain conversation context
-orac chat --message "What is machine learning?"
-orac chat --message "Give me a simple example"
-orac chat --message "How do I get started?"
+orac chat send "What is machine learning?"
+orac chat send "Give me a simple example"
+orac chat send "How do I get started?"
+
+# Use specific conversation IDs for multiple parallel conversations
+orac chat send "Help me code" --conversation-id work
+orac chat send "Plan vacation" --conversation-id personal
 ```
 
-### 2. Run from Python
+### 3. Multi-step Flows
+
+Create flows that chain multiple prompts together:
+
+```bash
+# List available flows
+orac flow list
+
+# Execute a flow
+orac flow run capital_recipe --country Italy
+
+# Show flow structure before running
+orac flow show research_assistant
+orac flow run research_assistant --topic "AI ethics"
+```
+
+### 4. Advanced Usage
+
+```bash
+# Override model and configuration
+orac prompt run capital --country "Canada" \
+  --model-name "gemini-2.5-flash" \
+  --generation-config '{"temperature": 0.4}'
+
+# Structured JSON responses
+orac prompt run recipe --json-output
+
+# Schema validation
+orac prompt run capital --country "Germany" \
+  --response-schema schemas/capital.schema.json
+
+# Attach local and remote files
+orac prompt run paper2audio \
+  --file reports/report.pdf \
+  --file-url https://example.com/image.jpg
+```
+
+### 5. Discovery and Help
+
+```bash
+# Discover available prompts and flows
+orac list                              # Show everything
+orac prompt list                       # Show only prompts
+orac flow list                         # Show only flows
+
+# Get detailed help
+orac prompt show capital               # Show prompt parameters
+orac flow show research_assistant      # Show flow structure
+orac --help                           # Show all available commands
+
+# Search by keyword
+orac search "translate"               # Find translation-related prompts/flows
+```
+
+---
+
+## Python API
+
+While the CLI provides an excellent user experience, you can also use Orac programmatically:
 
 ```python
 from orac import Orac
 
 # Basic text completion
 llm = Orac("capital")
-print(llm.completion())  # Defaults to France -> "Paris"
-print(llm.completion(country="Japan"))  # -> "Tokyo"
+print(llm.completion())  # Defaults to France → "Paris"
+print(llm.completion(country="Japan"))  # → "Tokyo"
 
 # JSON-returning prompts with automatic detection
 recipe_llm = Orac("recipe")
@@ -194,118 +324,63 @@ json_result = recipe_llm(dish="pasta", force_json=True)  # Returns dict
 # Explicit JSON parsing
 json_data = recipe_llm.completion_as_json(dish="pizza")  # Returns dict
 
-# Mixed usage - callable interface handles both text and JSON
-capital_result = llm(country="Spain")  # Returns "Madrid" (string)
-recipe_result = recipe_llm(dish="salad")  # Returns {...} (dict - auto-detected JSON)
-```
-
-### 3. Run from CLI
-
-```bash
-orac capital
-orac capital --country Japan
-orac capital --verbose
-orac capital --info
-orac ./a/b/ad_hoc_task.yaml --some-param foo
-```
-
-### 4. Advanced examples
-
-```bash
-# Override model and config
-orac capital --country "Canada" \
-  --model-name "gemini-2.5-flash" \
-  --generation-config '{"temperature": 0.4}'
-
-# Structured JSON response
-orac recipe --json-output
-
-# Schema validation
-orac capital --country "Germany" \
-  --response-schema schemas/capital.schema.json
-
-# Attach local and remote files
-orac paper2audio \
-  --file reports/report.pdf \
-  --file-url https://example.com/image.jpg
-```
-
-### 5. Conversation mode
-
-Orac supports automatic conversation mode that maintains context between interactions. Prompts can enable this by default in their YAML configuration.
-
-```bash
-# With conversation-enabled prompts (like chat.yaml), context is automatic
-orac chat --message "What is 10 times 4?"    # → "40"
-orac chat --message "Divided by 8?"          # → "5" (remembers context!)
-
-# Use specific conversation ID for multiple parallel conversations
-orac chat --conversation-id work --message "Help me with coding"
-orac chat --conversation-id personal --message "Plan my vacation"
-
-# Reset conversation before starting
-orac chat --reset-conversation --message "Let's start fresh"
-
-# Conversation management commands
-orac chat --list-conversations              # List all conversations
-orac chat --show-conversation CONVERSATION_ID   # Show conversation history
-orac chat --delete-conversation CONVERSATION_ID # Delete a conversation
-```
-
-### Python API with Conversations
-
-```python
-from orac import Orac
-
-# Automatic conversation mode (if enabled in YAML)
-chat = Orac("chat")  # chat.yaml has conversation: true
+# Conversation mode
+chat = Orac("chat", use_conversation=True)
 print(chat("Hello! What's 15 + 25?"))      # → "40"
 print(chat("Times 3?"))                     # → "120" (maintains context)
-
-# Manual conversation control
-assistant = Orac("capital", use_conversation=True, conversation_id="geography")
-print(assistant(country="France"))         # → "Paris"
-print(assistant(country="Japan"))          # → "Tokyo" (with context)
-
-# Review conversation history
-history = chat.get_conversation_history()
-for msg in history:
-    print(f"{msg['role']}: {msg['content']}")
-
-# Reset when done
-chat.reset_conversation()
-
-# Override conversation mode (even if YAML enables it)
-single_shot = Orac("chat", use_conversation=False)
-print(single_shot("One-time question"))    # No conversation context
 ```
 
-### 6. Workflows
+---
 
-Orac supports **workflows** - chains of prompts that execute in sequence with data flowing between steps. This enables complex multi-step AI operations like research → analysis → report generation.
+## YAML Prompt Reference
 
-#### Basic Workflow Usage
-
-```bash
-# List available workflows
-orac workflow list
-
-# Show workflow details
-orac workflow run research_assistant --info
-
-# Execute a workflow
-orac workflow run capital_recipe --country Italy
-
-# Dry run (show execution plan without running)
-orac workflow run research_assistant --topic "AI ethics" --dry-run
-```
-
-#### Creating Workflow YAML Files
-
-Workflows are defined in YAML files in the `workflows/` directory:
+### Basic YAML
 
 ```yaml
-# workflows/capital_recipe.yaml
+prompt: "Translate the following text: ${text}"
+parameters:
+  - name: text
+    type: string
+    required: true
+```
+
+### Advanced YAML Features
+
+```yaml
+model_name: gemini-2.0-flash
+api_key: ${OPENAI_API_KEY}
+
+generation_config:
+  temperature: 0.5
+  max_tokens: 300
+
+safety_settings:
+  - category: HARM_CATEGORY_HARASSMENT
+    threshold: BLOCK_NONE
+
+response_mime_type: application/json
+response_schema:
+  type: object
+  properties:
+    translation: { type: string }
+
+files:
+  - data/*.pdf
+file_urls:
+  - https://example.com/image.jpg
+
+require_file: true
+
+# Conversation mode settings
+conversation: true                # Enable conversation mode by default
+```
+
+### Flow YAML Structure
+
+Flows (formerly workflows) chain multiple prompts together:
+
+```yaml
+# flows/capital_recipe.yaml
 name: "Capital City Recipe"
 description: "Get capital city and suggest a traditional recipe"
 
@@ -338,238 +413,62 @@ steps:
       - result
 ```
 
-#### Workflow Features
-
-- **Dependency Management**: Steps run in topological order based on `depends_on` or data flow
-- **Template Variables**: Use `${inputs.param}` and `${step_name.output}` for dynamic values
-- **Error Handling**: Comprehensive validation and error reporting
-- **Dry Run Mode**: Preview execution plan without running prompts
-- **JSON Output**: `--json-output` formats results as structured JSON
-
-#### Complex Workflow Example
-
-```yaml
-# workflows/research_assistant.yaml
-name: "Research Assistant"
-description: "Multi-step research with analysis and summary"
-
-inputs:
-  - name: topic
-    type: string
-    required: true
-  - name: focus_area
-    type: string
-    default: "general overview"
-
-outputs:
-  - name: research_summary
-    source: final_report.result
-  - name: key_insights
-    source: analyze_findings.insights
-
-steps:
-  initial_research:
-    prompt: chat
-    inputs:
-      message: "Research ${inputs.topic}, focusing on ${inputs.focus_area}"
-    outputs: [result]
-
-  analyze_findings:
-    prompt: chat
-    depends_on: [initial_research]
-    inputs:
-      message: "Analyze these findings: ${initial_research.result}"
-    outputs: [insights, conclusions]
-
-  final_report:
-    prompt: chat
-    depends_on: [analyze_findings]
-    inputs:
-      message: "Create a report on ${inputs.topic}: ${analyze_findings.insights}"
-    outputs: [result]
-```
-
 ---
 
-## YAML Prompt Reference
-
-### Basic YAML
-
-```yaml
-prompt: "Translate the following text: ${text}"
-parameters:
-  - name: text
-    type: string
-    required: true
-```
-
-### Additional Options
-
-```yaml
-model_name: gemini-2.0-flash
-api_key: ${OPENAI_API_KEY}
-
-generation_config:
-  temperature: 0.5
-  max_tokens: 300
-
-safety_settings:
-  - category: HARM_CATEGORY_HARASSMENT
-    threshold: BLOCK_NONE
-
-response_mime_type: application/json
-response_schema:
-  type: object
-  properties:
-    translation: { type: string }
-
-files:
-  - data/*.pdf
-file_urls:
-  - https://example.com/image.jpg
-
-require_file: true
-
-# Conversation mode settings
-conversation: true                # Enable conversation mode by default
-                                 # When true, prompt is automatically set to '${message}'
-                                 # Optional 'prompt' field provides fallback for non-conversation usage
-```
-
-### Conversation Mode YAML
-
-For conversation-enabled prompts, you can simply enable conversation mode:
-
-```yaml
-# chat.yaml - A conversation-enabled assistant
-model_name: "gemini-2.5-flash"
-
-# Enable conversation mode - prompt automatically becomes '${message}'
-conversation: true
-
-# Optional: fallback prompt for when conversation is explicitly disabled
-prompt: "Please respond to this message: ${message}"
-
-system_prompt: |
-    You are a helpful AI assistant. You are operating in conversation mode
-    where context from previous messages is available.
-
-parameters:
-    - name: message
-      type: string
-      required: true
-      default: "Hi!"
-      description: "Your message or question for the assistant"
-```
-
-### Supported Parameter Types
-
-* `string`
-* `int`
-* `float`
-* `bool`
-* `list` (comma-separated values)
-
----
-
-## CLI Options
-
-```bash
-orac <prompt_name> [--parameter-name VALUE ...] [options]
-```
+## CLI Reference
 
 ### Global Flags
 
-* `--info`: Show parameter metadata
+All commands support these global flags:
+
 * `--verbose`, `-v`: Enable verbose logging
 * `--quiet`, `-q`: Suppress progress output (only show errors)
-* `--prompts-dir DIR`: Use custom prompt directory
-* `--model-name MODEL`
-* `--api-key KEY`
-* `--generation-config JSON`
-* `--safety-settings JSON`
-* `--file FILE`
-* `--file-url URL`
-* `--json-output`
-* `--response-schema FILE`
-* `--output FILE`, `-o`
-* `--conversation-id ID`
-* `--reset-conversation`
-* `--no-save`
+* `--help`, `-h`: Show help for any command
+* `--provider PROVIDER`: Override LLM provider
+* `--api-key KEY`: Override API key
+* `--model-name MODEL`: Override model name
+* `--output FILE`, `-o`: Write output to file
 
-### Progress Tracking
+### Resource-Specific Flags
 
-Orac provides real-time progress feedback for long-running operations:
+#### Prompt Commands
+* `--json-output`: Format response as JSON
+* `--response-schema FILE`: Validate against JSON schema
+* `--file FILE`: Attach local file
+* `--file-url URL`: Attach remote file
+* `--generation-config JSON`: Override generation settings
 
-**CLI Progress Display:**
-```bash
-# Default mode shows workflow progress with emojis and timestamps
-orac workflow run research_assistant --topic "AI ethics"
+#### Flow Commands
+* `--dry-run`: Show execution plan without running
+* `--json-output`: Format final output as JSON
 
-# Verbose mode shows detailed progress including individual prompts
-orac workflow run research_assistant --topic "AI safety" --verbose
-
-# Quiet mode suppresses progress (only shows errors)
-orac workflow run research_assistant --topic "Machine learning" --quiet
-```
-
-**Progress Output Example:**
-```
-🚀 14:32:15 - Starting workflow: Research Assistant
-   Total steps: 3
-   Execution order: initial_research → analyze_findings → final_report
-
-📝 14:32:16 - [1/3] (33%) Executing step: initial_research
-   Prompt: chat
-✅ 14:32:45 - Step completed: initial_research (29.2s)
-
-📝 14:32:45 - [2/3] (67%) Executing step: analyze_findings
-✅ 14:33:12 - Step completed: analyze_findings (26.8s)
-
-📝 14:33:12 - [3/3] (100%) Executing step: final_report
-✅ 14:33:35 - Step completed: final_report (23.1s)
-
-🎉 14:33:35 - Completed workflow: Research Assistant in 80.1s
-   Final outputs: research_summary, key_insights
-```
-
-**Programmatic Progress Tracking:**
-```python
-from orac import Orac
-from orac.progress import ProgressTracker, ProgressEvent, ProgressType
-
-# Built-in progress tracker
-tracker = ProgressTracker()
-orac = Orac("capital", progress_callback=tracker.track)
-result = orac(country="France")
-
-# Get progress summary
-summary = tracker.to_summary()
-print(f"Operation took {summary['duration_seconds']:.1f} seconds")
-print(f"Total events: {summary['total_events']}")
-
-# Custom progress handler
-def my_progress_handler(event: ProgressEvent):
-    if event.type == ProgressType.PROMPT_START:
-        print(f"🔄 Starting: {event.message}")
-    elif event.type == ProgressType.PROMPT_COMPLETE:
-        print(f"✅ Completed: {event.message}")
-    elif event.type in (ProgressType.PROMPT_ERROR, ProgressType.WORKFLOW_ERROR):
-        print(f"❌ Error: {event.message}")
-
-# Use custom handler
-orac = Orac("recipe", progress_callback=my_progress_handler)
-result = orac(dish="pasta")
-```
-
-### Conversation Management
-* `--list-conversations`
-* `--show-conversation ID`
-* `--delete-conversation ID`
+#### Chat Commands
+* `--conversation-id ID`: Use specific conversation
+* `--reset-conversation`: Reset conversation before sending
+* `--no-save`: Don't save message to conversation history
 
 ---
 
-## Logging
+## Migration Guide
+
+### From Old CLI Structure
+
+If you're upgrading from the old CLI structure, here's how commands map:
+
+| Old Command | New Command |
+|-------------|-------------|
+| `orac capital --country France` | `orac prompt run capital --country France` |
+| `orac workflow run research_assistant` | `orac flow run research_assistant` |
+| `orac chat --message "hello"` | `orac chat send "hello"` |
+
+**Quick migration**: Use the shortcut aliases during transition:
+- `orac run` → `orac prompt run`
+- `orac flow` → `orac flow run` (only the `run` is implicit now)
+- `orac ask` → `orac chat send`
+
+---
+
+## Logging and Debugging
 
 Orac provides comprehensive logging with two output modes:
 
@@ -591,53 +490,14 @@ Orac provides comprehensive logging with two output modes:
 ### Usage Examples
 ```bash
 # Quiet mode (default) - only shows LLM response
-orac capital --country France
+orac prompt run capital --country France
 
 # Verbose mode - shows detailed logging
-orac capital --country Spain --verbose
+orac prompt run capital --country Spain --verbose
 
 # Check recent logs
 tail -f llm.log
 ```
-
-To configure logging programmatically:
-
-```python
-from orac.logger import configure_console_logging
-configure_console_logging(verbose=True)
-```
-
----
-
-## Conversation Settings
-
-Conversations are automatically stored in a local SQLite database and can be enabled per-prompt via YAML configuration.
-
-### Configuration Methods
-
-1. **YAML-level** (recommended): Add `conversation: true` to your prompt YAML
-2. **Runtime**: Use `--conversation` flag or `use_conversation=True` parameter
-3. **Global default**: Set `ORAC_DEFAULT_CONVERSATION_MODE=true` environment variable
-
-### Environment Variables
-
-- `ORAC_CONVERSATION_DB` - Database file location (default: `~/.orac/conversations.db`)
-- `ORAC_DEFAULT_CONVERSATION_MODE` - Enable conversations globally (default: `false`)
-- `ORAC_MAX_CONVERSATION_HISTORY` - Maximum messages to load from history (default: `20`)
-
-```bash
-# Global conversation settings
-export ORAC_DEFAULT_CONVERSATION_MODE=true
-export ORAC_MAX_CONVERSATION_HISTORY=50
-export ORAC_CONVERSATION_DB="/path/to/conversations.db"
-```
-
-### Key Behavior
-
-- **YAML `conversation: true`**: Automatically enables conversation mode and sets prompt to `${message}`
-- **Runtime override**: `use_conversation=False` or `--conversation` flag can override YAML settings
-- **Auto-continuation**: When no `--conversation-id` is specified, continues the most recent conversation for that prompt
-- **Multiple conversations**: Use `--conversation-id` to maintain parallel conversations
 
 ---
 
@@ -648,3 +508,28 @@ To run the test suite:
 ```bash
 python test.py
 ```
+
+For enhanced testing with options:
+
+```bash
+python run_tests.py --coverage        # Run with coverage
+python run_tests.py --verbose         # Verbose output
+python run_tests.py tests.test_orac   # Run specific module
+```
+
+---
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests for new functionality
+5. Run the test suite
+6. Submit a pull request
+
+---
+
+## License
+
+[License information here]

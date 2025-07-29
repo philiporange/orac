@@ -4,7 +4,7 @@ Tests for progress tracking functionality.
 This module tests the progress infrastructure including:
 - Progress event creation and handling
 - Progress callbacks in Orac class
-- Progress tracking in workflows 
+- Progress tracking in flows 
 - CLI progress reporting
 """
 import pytest
@@ -19,7 +19,7 @@ from orac.progress import (
 )
 from orac.cli_progress import CLIProgressReporter, StreamingProgressReporter, create_cli_reporter
 from orac.orac import Orac
-from orac.workflow import WorkflowEngine, WorkflowSpec, WorkflowStep, WorkflowInput, WorkflowOutput
+from orac.flow import FlowEngine, WorkflowSpec, WorkflowStep, WorkflowInput, WorkflowOutput
 
 
 class TestProgressEvent:
@@ -48,7 +48,7 @@ class TestProgressEvent:
     def test_progress_percentage_calculation(self):
         """Test progress percentage calculation."""
         event = ProgressEvent(
-            type=ProgressType.WORKFLOW_STEP_START,
+            type=ProgressType.FLOW_STEP_START,
             message="Test",
             current_step=2,
             total_steps=4
@@ -64,7 +64,7 @@ class TestProgressEvent:
         assert event_no_steps.progress_percentage is None
         
         event_zero_total = ProgressEvent(
-            type=ProgressType.WORKFLOW_STEP_START,
+            type=ProgressType.FLOW_STEP_START,
             message="Test",
             current_step=1,
             total_steps=0
@@ -74,7 +74,7 @@ class TestProgressEvent:
     def test_progress_event_to_dict(self):
         """Test event serialization to dictionary."""
         event = ProgressEvent(
-            type=ProgressType.WORKFLOW_COMPLETE,
+            type=ProgressType.FLOW_COMPLETE,
             message="Workflow completed",
             current_step=3,
             total_steps=3,
@@ -83,7 +83,7 @@ class TestProgressEvent:
         
         event_dict = event.to_dict()
         
-        assert event_dict["type"] == "workflow_complete"
+        assert event_dict["type"] == "flow_complete"
         assert event_dict["message"] == "Workflow completed"
         assert event_dict["current_step"] == 3
         assert event_dict["total_steps"] == 3
@@ -130,7 +130,7 @@ class TestProgressTracker:
             ProgressEvent(ProgressType.PROMPT_START, "Start 1"),
             ProgressEvent(ProgressType.PROMPT_COMPLETE, "Complete 1"),
             ProgressEvent(ProgressType.PROMPT_START, "Start 2"),
-            ProgressEvent(ProgressType.WORKFLOW_START, "Workflow start"),
+            ProgressEvent(ProgressType.FLOW_START, "Workflow start"),
         ]
         
         for event in events:
@@ -139,8 +139,8 @@ class TestProgressTracker:
         start_events = tracker.get_events_by_type(ProgressType.PROMPT_START)
         assert len(start_events) == 2
         
-        workflow_events = tracker.get_events_by_type(ProgressType.WORKFLOW_START)
-        assert len(workflow_events) == 1
+        flow_events = tracker.get_events_by_type(ProgressType.FLOW_START)
+        assert len(flow_events) == 1
     
     def test_progress_tracker_summary(self):
         """Test summary generation."""
@@ -151,8 +151,8 @@ class TestProgressTracker:
         assert summary["status"] == "no_events"
         
         # Add events
-        tracker.track(ProgressEvent(ProgressType.WORKFLOW_START, "Start"))
-        tracker.track(ProgressEvent(ProgressType.WORKFLOW_COMPLETE, "Complete"))
+        tracker.track(ProgressEvent(ProgressType.FLOW_START, "Start"))
+        tracker.track(ProgressEvent(ProgressType.FLOW_COMPLETE, "Complete"))
         
         summary = tracker.to_summary()
         assert summary["status"] == "complete"
@@ -163,8 +163,8 @@ class TestProgressTracker:
         
         # Test error status
         error_tracker = ProgressTracker()
-        error_tracker.track(ProgressEvent(ProgressType.WORKFLOW_START, "Start"))
-        error_tracker.track(ProgressEvent(ProgressType.WORKFLOW_ERROR, "Error"))
+        error_tracker.track(ProgressEvent(ProgressType.FLOW_START, "Start"))
+        error_tracker.track(ProgressEvent(ProgressType.FLOW_ERROR, "Error"))
         
         error_summary = error_tracker.to_summary()
         assert error_summary["status"] == "error"
@@ -188,14 +188,14 @@ class TestCLIProgressReporter:
         quiet_reporter = CLIProgressReporter(quiet=True)
         assert quiet_reporter.quiet
     
-    def test_cli_reporter_workflow_events(self, capsys):
-        """Test workflow event reporting."""
+    def test_cli_reporter_flow_events(self, capsys):
+        """Test flow event reporting."""
         reporter = CLIProgressReporter(verbose=True)
         
         # Workflow start
         start_event = ProgressEvent(
-            type=ProgressType.WORKFLOW_START,
-            message="Starting workflow: test_workflow",
+            type=ProgressType.FLOW_START,
+            message="Starting flow: test_flow",
             total_steps=2,
             metadata={"execution_order": ["step1", "step2"]}
         )
@@ -203,13 +203,13 @@ class TestCLIProgressReporter:
         
         captured = capsys.readouterr()
         assert "🚀" in captured.err
-        assert "Starting workflow: test_workflow" in captured.err
+        assert "Starting flow: test_flow" in captured.err
         assert "Total steps: 2" in captured.err
         assert "step1 → step2" in captured.err
         
         # Workflow step start
         step_event = ProgressEvent(
-            type=ProgressType.WORKFLOW_STEP_START,
+            type=ProgressType.FLOW_STEP_START,
             message="Executing step: step1",
             current_step=1,
             total_steps=2,
@@ -230,14 +230,14 @@ class TestCLIProgressReporter:
         reporter = CLIProgressReporter(quiet=True)
         
         # Normal events should be suppressed
-        reporter.report(ProgressEvent(ProgressType.WORKFLOW_START, "Start"))
+        reporter.report(ProgressEvent(ProgressType.FLOW_START, "Start"))
         reporter.report(ProgressEvent(ProgressType.PROMPT_COMPLETE, "Complete"))
         
         captured = capsys.readouterr()
         assert captured.err == ""
         
         # Error events should still show
-        reporter.report(ProgressEvent(ProgressType.WORKFLOW_ERROR, "Error occurred"))
+        reporter.report(ProgressEvent(ProgressType.FLOW_ERROR, "Error occurred"))
         
         captured = capsys.readouterr()
         assert "❌" in captured.err
@@ -310,10 +310,10 @@ class TestCreateSimpleCallback:
         """Test simple callback creation and usage."""
         callback = create_simple_callback(verbose=True)
         
-        # Test workflow events
-        callback(ProgressEvent(ProgressType.WORKFLOW_START, "Starting", total_steps=2))
-        callback(ProgressEvent(ProgressType.WORKFLOW_STEP_START, "Step 1", current_step=1, total_steps=2))
-        callback(ProgressEvent(ProgressType.WORKFLOW_COMPLETE, "Done"))
+        # Test flow events
+        callback(ProgressEvent(ProgressType.FLOW_START, "Starting", total_steps=2))
+        callback(ProgressEvent(ProgressType.FLOW_STEP_START, "Step 1", current_step=1, total_steps=2))
+        callback(ProgressEvent(ProgressType.FLOW_COMPLETE, "Done"))
         
         captured = capsys.readouterr()
         assert "🚀" in captured.out
@@ -322,7 +322,7 @@ class TestCreateSimpleCallback:
 
 
 # Integration tests would go here but require actual Orac setup
-# These would test the progress callbacks in real Orac and WorkflowEngine usage
+# These would test the progress callbacks in real Orac and FlowEngine usage
 class TestProgressIntegration:
     """Test progress tracking integration with Orac components."""
     
@@ -348,11 +348,11 @@ class TestProgressIntegration:
             ProgressType.PROMPT_START,
             ProgressType.PROMPT_COMPLETE,
             ProgressType.PROMPT_ERROR,
-            ProgressType.WORKFLOW_START,
-            ProgressType.WORKFLOW_STEP_START,
-            ProgressType.WORKFLOW_STEP_COMPLETE,
-            ProgressType.WORKFLOW_COMPLETE,
-            ProgressType.WORKFLOW_ERROR,
+            ProgressType.FLOW_START,
+            ProgressType.FLOW_STEP_START,
+            ProgressType.FLOW_STEP_COMPLETE,
+            ProgressType.FLOW_COMPLETE,
+            ProgressType.FLOW_ERROR,
             ProgressType.API_REQUEST_START,
             ProgressType.API_REQUEST_COMPLETE,
             ProgressType.FILE_UPLOAD_START,
@@ -377,8 +377,8 @@ class TestProgressIntegration:
             "model_name": "gpt-4"
         }
         
-        workflow_metadata = {
-            "workflow_name": "research_flow",
+        flow_metadata = {
+            "flow_name": "research_flow",
             "step_name": "analyze", 
             "execution_order": ["gather", "analyze", "report"],
             "completed_steps": ["gather"]
@@ -394,13 +394,13 @@ class TestProgressIntegration:
         # All should work without issues
         events = [
             ProgressEvent(ProgressType.PROMPT_START, "Test", metadata=prompt_metadata),
-            ProgressEvent(ProgressType.WORKFLOW_STEP_START, "Test", metadata=workflow_metadata),
+            ProgressEvent(ProgressType.FLOW_STEP_START, "Test", metadata=flow_metadata),
             ProgressEvent(ProgressType.API_REQUEST_COMPLETE, "Test", metadata=api_metadata)
         ]
         
         assert all(event.metadata for event in events)
         assert events[0].metadata["prompt_name"] == "test"
-        assert events[1].metadata["workflow_name"] == "research_flow"
+        assert events[1].metadata["flow_name"] == "research_flow"
         assert events[2].metadata["files_count"] == 3
 
 

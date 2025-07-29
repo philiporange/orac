@@ -1,10 +1,10 @@
 """
-Workflow engine for Orac - enables chaining multiple prompts in a DAG structure.
+Flow engine for Orac - enables chaining multiple prompts in a DAG structure.
 
 This module provides classes and functions for:
-- Loading and validating workflow YAML specifications
-- Building dependency graphs from workflow definitions
-- Executing workflows with proper step ordering and result passing
+- Loading and validating flow YAML specifications
+- Building dependency graphs from flow definitions
+- Executing flows with proper step ordering and result passing
 - Template variable resolution for dynamic input mapping
 """
 
@@ -21,8 +21,8 @@ from .progress import ProgressCallback, ProgressEvent, ProgressType
 
 
 @dataclass
-class WorkflowInput:
-    """Represents a workflow input parameter."""
+class FlowInput:
+    """Represents a flow input parameter."""
     name: str
     type: str = "string"
     description: str = ""
@@ -31,16 +31,16 @@ class WorkflowInput:
 
 
 @dataclass
-class WorkflowOutput:
-    """Represents a workflow output mapping."""
+class FlowOutput:
+    """Represents a flow output mapping."""
     name: str
     source: str  # Format: "step_name.output_name"
     description: str = ""
 
 
 @dataclass
-class WorkflowStep:
-    """Represents a single step in a workflow."""
+class FlowStep:
+    """Represents a single step in a flow."""
     name: str
     prompt_name: str
     inputs: Dict[str, str]  # Maps param_name -> template string
@@ -50,31 +50,31 @@ class WorkflowStep:
 
 
 @dataclass
-class WorkflowSpec:
-    """Complete workflow specification loaded from YAML."""
+class FlowSpec:
+    """Complete flow specification loaded from YAML."""
     name: str
     description: str
-    inputs: List[WorkflowInput]
-    outputs: List[WorkflowOutput]
-    steps: Dict[str, WorkflowStep]
+    inputs: List[FlowInput]
+    outputs: List[FlowOutput]
+    steps: Dict[str, FlowStep]
 
 
-class WorkflowValidationError(Exception):
-    """Raised when workflow validation fails."""
+class FlowValidationError(Exception):
+    """Raised when flow validation fails."""
     pass
 
 
-class WorkflowExecutionError(Exception):
-    """Raised when workflow execution fails."""
+class FlowExecutionError(Exception):
+    """Raised when flow execution fails."""
     pass
 
 
-class WorkflowEngine:
-    """Executes workflows by managing step dependencies and data flow."""
+class FlowEngine:
+    """Executes flows by managing step dependencies and data flow."""
 
-    def __init__(self, workflow_spec: WorkflowSpec, prompts_dir: str = "prompts", 
+    def __init__(self, flow_spec: FlowSpec, prompts_dir: str = "prompts", 
                  progress_callback: Optional[ProgressCallback] = None):
-        self.spec = workflow_spec
+        self.spec = flow_spec
         self.prompts_dir = prompts_dir
         self.progress_callback = progress_callback
         self.results: Dict[str, Dict[str, Any]] = {}
@@ -83,7 +83,7 @@ class WorkflowEngine:
 
     def _build_dependency_graph(self) -> nx.DiGraph:
         """Build DAG from step dependencies and data flow."""
-        logger.debug(f"Building dependency graph for workflow: {self.spec.name}")
+        logger.debug(f"Building dependency graph for flow: {self.spec.name}")
         graph = nx.DiGraph()
         
         # Add all steps as nodes
@@ -155,10 +155,10 @@ class WorkflowEngine:
         logger.debug(f"Resolved to: {resolved}")
         return resolved
 
-    def _build_context(self, workflow_inputs: Dict[str, Any]) -> Dict[str, Any]:
+    def _build_context(self, flow_inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Build context for template resolution."""
         context = {
-            'inputs': workflow_inputs,
+            'inputs': flow_inputs,
         }
         
         # Add step results
@@ -168,14 +168,14 @@ class WorkflowEngine:
         return context
 
     def _execute_step(self, step_name: str, context: Dict[str, Any], step_index: int = 0, total_steps: int = 0) -> Dict[str, Any]:
-        """Execute a single workflow step."""
-        logger.info(f"Executing workflow step: {step_name}")
+        """Execute a single flow step."""
+        logger.info(f"Executing flow step: {step_name}")
         step = self.spec.steps[step_name]
         
         # Emit step start progress
         if self.progress_callback:
             self.progress_callback(ProgressEvent(
-                type=ProgressType.WORKFLOW_STEP_START,
+                type=ProgressType.FLOW_STEP_START,
                 message=f"Executing step: {step_name}",
                 current_step=step_index + 1,
                 total_steps=total_steps,
@@ -212,7 +212,7 @@ class WorkflowEngine:
             # Emit step completion progress
             if self.progress_callback:
                 self.progress_callback(ProgressEvent(
-                    type=ProgressType.WORKFLOW_STEP_COMPLETE,
+                    type=ProgressType.FLOW_STEP_COMPLETE,
                     message=f"Completed step: {step_name}",
                     current_step=step_index + 1,
                     total_steps=total_steps,
@@ -225,27 +225,27 @@ class WorkflowEngine:
         except Exception as e:
             if self.progress_callback:
                 self.progress_callback(ProgressEvent(
-                    type=ProgressType.WORKFLOW_ERROR,
+                    type=ProgressType.FLOW_ERROR,
                     message=f"Step '{step_name}' failed: {str(e)}",
                     current_step=step_index + 1,
                     total_steps=total_steps,
                     step_name=step_name,
                     metadata={"step_name": step_name, "error_type": type(e).__name__}
                 ))
-            raise WorkflowExecutionError(f"Step '{step_name}' failed: {e}")
+            raise FlowExecutionError(f"Step '{step_name}' failed: {e}")
 
     def execute(self, inputs: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
-        """Execute the workflow and return final outputs."""
-        logger.info(f"Starting workflow execution: {self.spec.name}")
+        """Execute the flow and return final outputs."""
+        logger.info(f"Starting flow execution: {self.spec.name}")
         
-        # Emit workflow start progress
+        # Emit flow start progress
         if self.progress_callback:
             self.progress_callback(ProgressEvent(
-                type=ProgressType.WORKFLOW_START,
-                message=f"Starting workflow: {self.spec.name}",
+                type=ProgressType.FLOW_START,
+                message=f"Starting flow: {self.spec.name}",
                 total_steps=len(self.execution_order),
                 metadata={
-                    "workflow_name": self.spec.name,
+                    "flow_name": self.spec.name,
                     "total_steps": len(self.execution_order),
                     "execution_order": self.execution_order,
                     "dry_run": dry_run
@@ -290,17 +290,17 @@ class WorkflowEngine:
                 except Exception as e:
                     raise WorkflowExecutionError(f"Failed to resolve output '{output.name}': {e}")
             
-            logger.info(f"Workflow completed successfully with {len(final_outputs)} outputs")
+            logger.info(f"Flow completed successfully with {len(final_outputs)} outputs")
             
-            # Emit workflow completion progress
+            # Emit flow completion progress
             if self.progress_callback:
                 self.progress_callback(ProgressEvent(
-                    type=ProgressType.WORKFLOW_COMPLETE,
-                    message=f"Completed workflow: {self.spec.name}",
+                    type=ProgressType.FLOW_COMPLETE,
+                    message=f"Completed flow: {self.spec.name}",
                     current_step=len(self.execution_order),
                     total_steps=len(self.execution_order),
                     metadata={
-                        "workflow_name": self.spec.name,
+                        "flow_name": self.spec.name,
                         "outputs": list(final_outputs.keys()),
                         "total_steps_completed": len(self.execution_order)
                     }
@@ -309,13 +309,13 @@ class WorkflowEngine:
             return final_outputs
             
         except Exception as e:
-            # Emit workflow error progress
+            # Emit flow error progress
             if self.progress_callback:
                 self.progress_callback(ProgressEvent(
-                    type=ProgressType.WORKFLOW_ERROR,
-                    message=f"Workflow '{self.spec.name}' failed: {str(e)}",
+                    type=ProgressType.FLOW_ERROR,
+                    message=f"Flow '{self.spec.name}' failed: {str(e)}",
                     metadata={
-                        "workflow_name": self.spec.name,
+                        "flow_name": self.spec.name,
                         "error_type": type(e).__name__,
                         "completed_steps": len(self.results)
                     }
@@ -323,41 +323,41 @@ class WorkflowEngine:
             raise
 
     def _validate_inputs(self, inputs: Dict[str, Any]) -> None:
-        """Validate that required workflow inputs are provided."""
-        for workflow_input in self.spec.inputs:
-            if workflow_input.required and workflow_input.name not in inputs:
-                if workflow_input.default is not None:
-                    inputs[workflow_input.name] = workflow_input.default
+        """Validate that required flow inputs are provided."""
+        for flow_input in self.spec.inputs:
+            if flow_input.required and flow_input.name not in inputs:
+                if flow_input.default is not None:
+                    inputs[flow_input.name] = flow_input.default
                 else:
                     raise WorkflowValidationError(
-                        f"Required input '{workflow_input.name}' is missing"
+                        f"Required input '{flow_input.name}' is missing"
                     )
 
 
-def load_workflow(workflow_path: Union[str, Path]) -> WorkflowSpec:
-    """Load and validate workflow YAML file."""
-    logger.debug(f"Loading workflow from: {workflow_path}")
+def load_flow(flow_path: Union[str, Path]) -> FlowSpec:
+    """Load and validate flow YAML file."""
+    logger.debug(f"Loading flow from: {flow_path}")
     
-    workflow_path = Path(workflow_path)
-    if not workflow_path.exists():
-        raise WorkflowValidationError(f"Workflow file not found: {workflow_path}")
+    flow_path = Path(flow_path)
+    if not flow_path.exists():
+        raise FlowValidationError(f"Flow file not found: {flow_path}")
     
     try:
-        with open(workflow_path, 'r', encoding='utf-8') as f:
+        with open(flow_path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
     except yaml.YAMLError as e:
-        raise WorkflowValidationError(f"Invalid YAML in workflow file: {e}")
+        raise FlowValidationError(f"Invalid YAML in flow file: {e}")
     
-    return _parse_workflow_data(data, workflow_path)
+    return _parse_flow_data(data, flow_path)
 
 
-def _parse_workflow_data(data: Dict[str, Any], source_path: Path) -> WorkflowSpec:
-    """Parse workflow data dictionary into WorkflowSpec."""
+def _parse_flow_data(data: Dict[str, Any], source_path: Path) -> FlowSpec:
+    """Parse flow data dictionary into FlowSpec."""
     try:
         # Parse inputs
         inputs = []
         for input_data in data.get('inputs', []):
-            inputs.append(WorkflowInput(
+            inputs.append(FlowInput(
                 name=input_data['name'],
                 type=input_data.get('type', 'string'),
                 description=input_data.get('description', ''),
@@ -368,7 +368,7 @@ def _parse_workflow_data(data: Dict[str, Any], source_path: Path) -> WorkflowSpe
         # Parse outputs
         outputs = []
         for output_data in data.get('outputs', []):
-            outputs.append(WorkflowOutput(
+            outputs.append(FlowOutput(
                 name=output_data['name'],
                 source=output_data['source'],
                 description=output_data.get('description', '')
@@ -377,7 +377,7 @@ def _parse_workflow_data(data: Dict[str, Any], source_path: Path) -> WorkflowSpe
         # Parse steps
         steps = {}
         for step_name, step_data in data.get('steps', {}).items():
-            steps[step_name] = WorkflowStep(
+            steps[step_name] = FlowStep(
                 name=step_name,
                 prompt_name=step_data['prompt'],
                 inputs=step_data.get('inputs', {}),
@@ -386,7 +386,7 @@ def _parse_workflow_data(data: Dict[str, Any], source_path: Path) -> WorkflowSpe
                 when=step_data.get('when')
             )
         
-        return WorkflowSpec(
+        return FlowSpec(
             name=data.get('name', source_path.stem),
             description=data.get('description', ''),
             inputs=inputs,
@@ -395,28 +395,28 @@ def _parse_workflow_data(data: Dict[str, Any], source_path: Path) -> WorkflowSpe
         )
         
     except KeyError as e:
-        raise WorkflowValidationError(f"Missing required field in workflow: {e}")
+        raise FlowValidationError(f"Missing required field in flow: {e}")
     except Exception as e:
-        raise WorkflowValidationError(f"Failed to parse workflow: {e}")
+        raise FlowValidationError(f"Failed to parse flow: {e}")
 
 
-def list_workflows(workflows_dir: Union[str, Path]) -> List[Dict[str, str]]:
-    """List available workflows in the workflows directory."""
-    workflows_dir = Path(workflows_dir)
-    workflows = []
+def list_flows(flows_dir: Union[str, Path]) -> List[Dict[str, str]]:
+    """List available flows in the flows directory."""
+    flows_dir = Path(flows_dir)
+    flows = []
     
-    if not workflows_dir.exists():
-        return workflows
+    if not flows_dir.exists():
+        return flows
     
-    for yaml_file in workflows_dir.glob("*.yaml"):
+    for yaml_file in flows_dir.glob("*.yaml"):
         try:
-            spec = load_workflow(yaml_file)
-            workflows.append({
+            spec = load_flow(yaml_file)
+            flows.append({
                 'name': yaml_file.stem,
                 'description': spec.description,
                 'path': str(yaml_file)
             })
         except Exception as e:
-            logger.warning(f"Failed to load workflow {yaml_file}: {e}")
+            logger.warning(f"Failed to load flow {yaml_file}: {e}")
     
-    return workflows
+    return flows

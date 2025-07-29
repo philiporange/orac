@@ -1,9 +1,9 @@
 """
-Workflow integration tests for essential functionality.
+Flow integration tests for essential functionality.
 
-These tests focus on the core workflow features:
-- Basic workflow loading
-- Simple workflow execution
+These tests focus on the core flow features:
+- Basic flow loading
+- Simple flow execution
 - Input/output handling
 - Error handling
 """
@@ -13,23 +13,23 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from orac.workflow import WorkflowEngine, load_workflow, list_workflows
-from orac.workflow import WorkflowValidationError, WorkflowExecutionError
+from orac.flow import FlowEngine, load_flow, list_flows
+from orac.flow import FlowValidationError, FlowExecutionError
 
 
-class TestWorkflow:
-    """Tests for core workflow functionality."""
+class TestFlow:
+    """Tests for core flow functionality."""
 
     @pytest.mark.integration
-    def test_workflow_loading(self, temp_dir):
-        """Test basic workflow loading from YAML."""
-        workflows_dir = temp_dir / "workflows"
-        workflows_dir.mkdir()
+    def test_flow_loading(self, temp_dir):
+        """Test basic flow loading from YAML."""
+        flows_dir = temp_dir / "flows"
+        flows_dir.mkdir()
         
-        # Create a simple workflow
-        (workflows_dir / "simple.yaml").write_text("""
+        # Create a simple flow
+        (flows_dir / "simple.yaml").write_text("""
 name: "Simple Test Workflow"
-description: "A minimal test workflow"
+description: "A minimal test flow"
 
 inputs:
   - name: input_text
@@ -52,54 +52,54 @@ steps:
 """)
         
         # Should load without error
-        workflow_path = workflows_dir / "simple.yaml"
-        workflow = load_workflow(str(workflow_path))
-        assert workflow.name == "Simple Test Workflow"
-        assert len(workflow.inputs) == 1
-        assert len(workflow.outputs) == 1
-        assert len(workflow.steps) == 1
+        flow_path = flows_dir / "simple.yaml"
+        flow = load_flow(str(flow_path))
+        assert flow.name == "Simple Test Workflow"
+        assert len(flow.inputs) == 1
+        assert len(flow.outputs) == 1
+        assert len(flow.steps) == 1
 
     @pytest.mark.integration
-    def test_workflow_list(self, temp_dir):
-        """Test listing available workflows."""
-        workflows_dir = temp_dir / "workflows"
-        workflows_dir.mkdir()
+    def test_flow_list(self, temp_dir):
+        """Test listing available flows."""
+        flows_dir = temp_dir / "flows"
+        flows_dir.mkdir()
         
-        # Create test workflows
-        (workflows_dir / "workflow1.yaml").write_text("""
+        # Create test flows
+        (flows_dir / "flow1.yaml").write_text("""
 name: "Workflow 1"
 steps:
   step1:
     prompt: test
 """)
         
-        (workflows_dir / "workflow2.yaml").write_text("""
+        (flows_dir / "flow2.yaml").write_text("""
 name: "Workflow 2" 
 steps:
   step1:
     prompt: test
 """)
         
-        workflows = list_workflows(str(workflows_dir))
-        assert len(workflows) >= 2
+        flows = list_flows(str(flows_dir))
+        assert len(flows) >= 2
         
-        # Should contain our test workflow files
-        workflow_names = [w['name'] for w in workflows] 
+        # Should contain our test flow files
+        flow_names = [w['name'] for w in flows] 
         # The function returns filename without extension, not the name field
-        assert "workflow1" in workflow_names
-        assert "workflow2" in workflow_names
+        assert "flow1" in flow_names
+        assert "flow2" in flow_names
 
     @pytest.mark.integration
     @patch('orac.orac.call_api')
-    def test_simple_workflow_execution(self, mock_call_api, temp_dir, test_prompts_dir):
-        """Test execution of a simple single-step workflow."""
+    def test_simple_flow_execution(self, mock_call_api, temp_dir, test_prompts_dir):
+        """Test execution of a simple single-step flow."""
         mock_call_api.return_value = "Processed: Hello World"
         
-        workflows_dir = temp_dir / "workflows"
-        workflows_dir.mkdir()
+        flows_dir = temp_dir / "flows"
+        flows_dir.mkdir()
         
-        # Create workflow
-        (workflows_dir / "simple_exec.yaml").write_text("""
+        # Create flow
+        (flows_dir / "simple_exec.yaml").write_text("""
 name: "Simple Execution Test"
 description: "Test single step execution"
 
@@ -121,9 +121,9 @@ steps:
       - output
 """)
         
-        # Load and execute workflow
-        workflow = load_workflow(str(workflows_dir / "simple_exec.yaml"))
-        engine = WorkflowEngine(workflow, prompts_dir=str(test_prompts_dir))
+        # Load and execute flow
+        flow = load_flow(str(flows_dir / "simple_exec.yaml"))
+        engine = FlowEngine(flow, prompts_dir=str(test_prompts_dir))
         
         results = engine.execute(inputs={"message": "Hello World"})
         
@@ -138,15 +138,15 @@ steps:
 
     @pytest.mark.integration
     @patch('orac.orac.call_api')
-    def test_workflow_execution_error(self, mock_call_api, temp_dir, test_prompts_dir):
-        """Test workflow execution error handling."""
+    def test_flow_execution_error(self, mock_call_api, temp_dir, test_prompts_dir):
+        """Test flow execution error handling."""
         # Mock API call to raise an exception
         mock_call_api.side_effect = Exception("API Error")
         
-        workflows_dir = temp_dir / "workflows"
-        workflows_dir.mkdir()
+        flows_dir = temp_dir / "flows"
+        flows_dir.mkdir()
         
-        (workflows_dir / "error_test.yaml").write_text("""
+        (flows_dir / "error_test.yaml").write_text("""
 name: "Error Test Workflow"
 inputs:
   - name: input
@@ -164,28 +164,28 @@ steps:
       - output
 """)
         
-        workflow = load_workflow(str(workflows_dir / "error_test.yaml"))
-        engine = WorkflowEngine(workflow, prompts_dir=str(test_prompts_dir))
+        flow = load_flow(str(flows_dir / "error_test.yaml"))
+        engine = FlowEngine(flow, prompts_dir=str(test_prompts_dir))
         
-        with pytest.raises(WorkflowExecutionError):
+        with pytest.raises(FlowExecutionError):
             engine.execute(inputs={"input": "test"})
 
 
 
-class TestWorkflowInputOutput:
-    """Tests for workflow input/output handling."""
+class TestFlowInputOutput:
+    """Tests for flow input/output handling."""
 
 
     @pytest.mark.integration
     @patch('orac.orac.call_api')
     def test_output_mapping(self, mock_call_api, temp_dir, test_prompts_dir):
-        """Test workflow output mapping from step results."""
+        """Test flow output mapping from step results."""
         mock_call_api.return_value = "Step Output"
         
-        workflows_dir = temp_dir / "workflows"
-        workflows_dir.mkdir()
+        flows_dir = temp_dir / "flows"
+        flows_dir.mkdir()
         
-        (workflows_dir / "output_test.yaml").write_text("""
+        (flows_dir / "output_test.yaml").write_text("""
 name: "Output Mapping Test"
 inputs:
   - name: input
@@ -208,8 +208,8 @@ steps:
       - result
 """)
         
-        workflow = load_workflow(str(workflows_dir / "output_test.yaml"))
-        engine = WorkflowEngine(workflow, prompts_dir=str(test_prompts_dir))
+        flow = load_flow(str(flows_dir / "output_test.yaml"))
+        engine = FlowEngine(flow, prompts_dir=str(test_prompts_dir))
         
         results = engine.execute(inputs={"input": "test"})
         

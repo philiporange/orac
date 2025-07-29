@@ -14,7 +14,7 @@ from orac.logger import configure_console_logging
 from orac.config import Config
 from orac.orac import Orac
 from orac.chat import start_chat_interface
-from orac.workflow import load_workflow, WorkflowEngine, list_workflows, WorkflowValidationError, WorkflowExecutionError
+from orac.flow import load_flow, FlowEngine, list_flows, FlowValidationError, FlowExecutionError
 from orac.cli_progress import create_cli_reporter
 
 
@@ -235,7 +235,7 @@ def show_prompt_info(prompts_dir: str, prompt_name: str) -> None:
         print("\nNo parameters defined.")
 
     # Compact example
-    example = [f"python -m orac {prompt_name}"]
+    example = [f"orac prompt run {prompt_name}"]
     for p in params:
         if p.get("required", "default" not in p):
             flag = f"--{p['name'].replace('_', '-')}"
@@ -307,25 +307,25 @@ def show_conversation_command(conversation_id: str):
         print(f"[{msg['timestamp']}] {role_label}:\n{msg['content']}\n")
 
 
-def add_workflow_input_argument(parser: argparse.ArgumentParser, workflow_input):
-    """Add a workflow input as a CLI argument."""
-    name = workflow_input.name
+def add_flow_input_argument(parser: argparse.ArgumentParser, flow_input):
+    """Add a flow input as a CLI argument."""
+    name = flow_input.name
     arg_name = f"--{name.replace('_', '-')}"
     
     help_parts = []
-    if workflow_input.description:
-        help_parts.append(workflow_input.description)
+    if flow_input.description:
+        help_parts.append(flow_input.description)
     
-    help_parts.append(f"(type: {workflow_input.type})")
+    help_parts.append(f"(type: {flow_input.type})")
     
-    if workflow_input.required and workflow_input.default is None:
+    if flow_input.required and flow_input.default is None:
         help_parts.append("REQUIRED")
-    elif workflow_input.default is not None:
-        help_parts.append(f"default: {workflow_input.default}")
+    elif flow_input.default is not None:
+        help_parts.append(f"default: {flow_input.default}")
     
     help_text = " ".join(help_parts)
     
-    cli_required = workflow_input.required and workflow_input.default is None
+    cli_required = flow_input.required and flow_input.default is None
     
     parser.add_argument(
         arg_name,
@@ -336,33 +336,33 @@ def add_workflow_input_argument(parser: argparse.ArgumentParser, workflow_input)
     )
 
 
-def list_workflows_command(workflows_dir: str):
-    """List available workflows."""
-    workflows = list_workflows(workflows_dir)
+def list_flows_command(flows_dir: str):
+    """List available flows."""
+    flows = list_flows(flows_dir)
     
-    if not workflows:
-        print(f"No workflows found in {workflows_dir}")
+    if not flows:
+        print(f"No flows found in {flows_dir}")
         return
     
-    print(f"\nAvailable workflows ({len(workflows)} total):")
+    print(f"\nAvailable flows ({len(flows)} total):")
     print("-" * 80)
     print(f"{'Name':20} {'Description':60}")
     print("-" * 80)
     
-    for workflow in workflows:
-        name = workflow['name']
-        desc = workflow['description'][:57] + "..." if len(workflow['description']) > 60 else workflow['description']
+    for flow in flows:
+        name = flow['name']
+        desc = flow['description'][:57] + "..." if len(flow['description']) > 60 else flow['description']
         print(f"{name:20} {desc:60}")
 
 
-def show_workflow_info(workflows_dir: str, workflow_name: str):
-    """Show detailed information about a workflow."""
-    workflow_path = Path(workflows_dir) / f"{workflow_name}.yaml"
+def show_flow_info(flows_dir: str, flow_name: str):
+    """Show detailed information about a flow."""
+    flow_path = Path(flows_dir) / f"{flow_name}.yaml"
     
     try:
-        spec = load_workflow(workflow_path)
-    except WorkflowValidationError as e:
-        print(f"Error loading workflow: {e}", file=sys.stderr)
+        spec = load_flow(flow_path)
+    except FlowValidationError as e:
+        print(f"Error loading flow: {e}", file=sys.stderr)
         sys.exit(1)
     
     banner = f"Workflow: {spec.name}"
@@ -401,7 +401,7 @@ def show_workflow_info(workflows_dir: str, workflow_name: str):
             print()
     
     # Example usage
-    example = [f"orac workflow {workflow_name}"]
+    example = [f"orac flow {flow_name}"]
     for inp in spec.inputs:
         if inp.required and inp.default is None:
             flag = f"--{inp.name.replace('_', '-')}"
@@ -409,385 +409,512 @@ def show_workflow_info(workflows_dir: str, workflow_name: str):
     print("Example usage:\n ", " ".join(example))
 
 
-def run_workflow_command(args):
-    """Execute a workflow."""
-    workflows_dir = args.workflows_dir
-    workflow_name = args.workflow_name
-    workflow_path = Path(workflows_dir) / f"{workflow_name}.yaml"
-    
-    try:
-        spec = load_workflow(workflow_path)
-        
-        # Create progress reporter if not quiet
-        progress_callback = None
-        if not getattr(args, 'quiet', False):
-            reporter = create_cli_reporter(verbose=args.verbose, quiet=getattr(args, 'quiet', False))
-            progress_callback = reporter.report
-        
-        engine = WorkflowEngine(spec, prompts_dir=args.prompts_dir, progress_callback=progress_callback)
-        
-        # Collect input values from CLI args
-        inputs = {}
-        for workflow_input in spec.inputs:
-            cli_value = getattr(args, workflow_input.name, None)
-            if cli_value is not None:
-                # Convert CLI string to appropriate type
-                converted_value = convert_cli_value(cli_value, workflow_input.type, workflow_input.name)
-                inputs[workflow_input.name] = converted_value
-            elif workflow_input.default is not None:
-                inputs[workflow_input.name] = workflow_input.default
-        
-        logger.debug(f"Workflow inputs: {inputs}")
-        
-        # Execute workflow
-        results = engine.execute(inputs, dry_run=args.dry_run)
-        
-        if args.dry_run:
-            print("DRY RUN - Workflow execution plan:")
-            print(f"Execution order: {' -> '.join(engine.execution_order)}")
-            return
-        
-        # Output results
-        if args.output:
-            try:
-                with open(args.output, "w", encoding="utf-8") as f:
-                    if args.json_output:
-                        json.dump(results, f, indent=2)
-                    else:
-                        for name, value in results.items():
-                            f.write(f"{name}: {value}\n")
-                logger.info(f"Workflow output written to file: {args.output}")
-            except IOError as e:
-                logger.error(f"Error writing to output file '{args.output}': {e}")
-                print(f"Error writing to output file '{args.output}': {e}", file=sys.stderr)
-                sys.exit(1)
-        else:
-            if args.json_output:
-                print(json.dumps(results, indent=2))
-            else:
-                for name, value in results.items():
-                    print(f"{name}: {value}")
-        
-        logger.info("Workflow completed successfully")
-        
-    except (WorkflowValidationError, WorkflowExecutionError) as e:
-        logger.error(f"Workflow error: {e}")
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        logger.error(f"Unexpected error running workflow: {e}")
-        print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
-
 
 def main():
-    # Check if we're using the new subcommand interface or legacy mode
-    # Legacy mode: first arg is prompt name (not 'workflow')
-    # New mode: first arg is 'workflow' 
+    """Main entry point using resource-action command structure."""
     
-    if len(sys.argv) > 1 and sys.argv[1] == "workflow":
-        # New workflow subcommand interface
-        run_workflow_interface()
-    else:
-        # Legacy prompt interface (backward compatibility)
-        run_prompt_interface()
-
-
-def run_workflow_interface():
-    """Handle workflow subcommand interface."""
-    # We need to handle the fact that 'workflow' might be in sys.argv
-    argv = sys.argv[1:]
-    if argv and argv[0] == 'workflow':
-        argv = argv[1:]
-
-    # Main parser
+    # Main parser with resource-action structure
     parser = argparse.ArgumentParser(
-        prog="orac workflow",
-        description="Execute workflows - chains of prompts with data flow"
+        prog="orac",
+        description="Orac - YAML-driven LLM framework with intuitive command structure",
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
-    # Global flags
+    # Global flags (available on all commands per README)
     parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Enable verbose logging output"
+        "--verbose", "-v", 
+        action="store_true", 
+        help="Enable verbose logging"
     )
     parser.add_argument(
-        "--quiet", "-q", action="store_true", help="Suppress progress output (only show errors)"
+        "--quiet", "-q", 
+        action="store_true", 
+        help="Suppress progress output (only show errors)"
     )
     parser.add_argument(
-        "--workflows-dir", default=Config.DEFAULT_WORKFLOWS_DIR, help="Directory where workflow YAML files live"
+        "--provider",
+        choices=["openai", "google", "anthropic", "azure", "openrouter", "custom"],
+        help="Override LLM provider"
     )
     parser.add_argument(
-        "--prompts-dir", default=Config.DEFAULT_PROMPTS_DIR, help="Directory where prompt YAML files live"
+        "--api-key",
+        help="Override API key"
     )
-
-    subparsers = parser.add_subparsers(dest='workflow_command', help='Workflow commands')
-    subparsers.required = True
-
-    # List command
-    list_parser = subparsers.add_parser('list', help='List available workflows')
-
-    # Run command parser
-    run_parser = subparsers.add_parser('run', help='Run a workflow')
-    run_parser.add_argument('workflow_name', nargs='?', default=None, help='Name of the workflow to run')
-    run_parser.add_argument('--info', action='store_true', help='Show workflow info')
-    run_parser.add_argument('--dry-run', action='store_true', help='Show execution plan only')
-    run_parser.add_argument('--output', '-o', help='Write output to file')
-    run_parser.add_argument('--json-output', action='store_true', help='Output results as JSON')
-
-    # Parse known args to find the workflow and add its params
-    args, remaining_argv = parser.parse_known_args(argv)
-
+    parser.add_argument(
+        "--model-name",
+        help="Override model name"
+    )
+    parser.add_argument(
+        "--output", "-o",
+        help="Write output to file"
+    )
+    # Note: --help/-h is handled automatically by argparse
+    
+    # Create subparsers for resources
+    subparsers = parser.add_subparsers(
+        dest='resource', 
+        help='Available resources',
+        metavar='<resource>'
+    )
+    
+    # Add resource parsers
+    add_prompt_parser(subparsers)
+    add_flow_parser(subparsers)
+    add_chat_parser(subparsers)
+    add_config_parser(subparsers)
+    add_auth_parser(subparsers)
+    add_global_commands(subparsers)
+    
+    # Handle shortcuts and aliases
+    args, remaining = handle_shortcuts_and_parse(parser)
+    
     # Configure logging
     configure_console_logging(verbose=args.verbose)
-
-    # If 'run' command, load workflow and add its arguments
-    if args.workflow_command == 'run' and args.workflow_name:
-        try:
-            workflow_path = Path(args.workflows_dir) / f"{args.workflow_name}.yaml"
-            if workflow_path.is_file():
-                spec = load_workflow(workflow_path)
-                for workflow_input in spec.inputs:
-                    add_workflow_input_argument(run_parser, workflow_input)
-            else:
-                if not any(h in remaining_argv for h in ['-h', '--help']):
-                     print(f"Error: Workflow '{args.workflow_name}' not found at: {workflow_path}", file=sys.stderr)
-                     sys.exit(1)
-
-        except WorkflowValidationError as e:
-            print(f"Error validating workflow '{args.workflow_name}': {e}", file=sys.stderr)
-            sys.exit(1)
-
-    # Re-parse all arguments now that the parser is fully configured
-    # Pass the original argv so that it can be parsed correctly from the start
-    args = parser.parse_args(argv)
-
-    # Execute command
-    if args.workflow_command == "list":
-        list_workflows_command(args.workflows_dir)
-        sys.exit(0)
-    elif args.workflow_command == "run":
-        if not args.workflow_name:
-            run_parser.print_help()
-            sys.exit(1)
-        if args.info:
-            show_workflow_info(args.workflows_dir, args.workflow_name)
-            sys.exit(0)
-        else:
-            run_workflow_command(args)
-            sys.exit(0)
+    
+    # Route to appropriate handler
+    if args.resource == 'prompt':
+        handle_prompt_commands(args)
+    elif args.resource == 'flow':
+        handle_flow_commands(args)
+    elif args.resource == 'chat':
+        handle_chat_commands(args)
+    elif args.resource == 'config':  
+        handle_config_commands(args)
+    elif args.resource == 'auth':
+        handle_auth_commands(args)
+    elif args.resource in ['list', 'search']:
+        handle_global_commands(args)
     else:
+        # No resource specified, show help
         parser.print_help()
         sys.exit(1)
 
 
-def run_prompt_interface():
-    """Handle legacy prompt interface (backward compatibility)."""
-    # First pass: get prompt name and check for info request
-    pre_parser = argparse.ArgumentParser(add_help=False)
-    pre_parser.add_argument(
-        "prompt", help="Name of the prompt (yaml file without .yaml)"
+def add_prompt_parser(subparsers):
+    """Add prompt resource parser."""
+    prompt_parser = subparsers.add_parser(
+        'prompt', 
+        help='Single AI interactions',
+        description='Execute, discover, and explore prompts'
     )
-    pre_parser.add_argument(
-        "--prompts-dir",
+    
+    # Add common arguments
+    add_common_prompt_args(prompt_parser)
+    
+    # Create action subparsers
+    prompt_subparsers = prompt_parser.add_subparsers(
+        dest='action',
+        help='Available actions',
+        metavar='<action>'
+    )
+    
+    # run action
+    run_parser = prompt_subparsers.add_parser('run', help='Execute a prompt')
+    run_parser.add_argument('name', help='Name of the prompt to run')
+    add_prompt_execution_args(run_parser)
+    
+    # list action
+    list_parser = prompt_subparsers.add_parser('list', help='List all available prompts')
+    
+    # show action
+    show_parser = prompt_subparsers.add_parser('show', help='Show prompt details & parameters')
+    show_parser.add_argument('name', help='Name of the prompt to show')
+    
+    # validate action
+    validate_parser = prompt_subparsers.add_parser('validate', help='Validate prompt YAML')
+    validate_parser.add_argument('name', help='Name of the prompt to validate')
+    
+    return prompt_parser
+
+
+def add_flow_parser(subparsers):
+    """Add flow resource parser."""
+    flow_parser = subparsers.add_parser(
+        'flow',
+        help='Multi-step AI workflows', 
+        description='Execute, discover, and explore flows'
+    )
+    
+    # Add common arguments
+    add_common_flow_args(flow_parser)
+    
+    # Create action subparsers
+    flow_subparsers = flow_parser.add_subparsers(
+        dest='action',
+        help='Available actions',
+        metavar='<action>'
+    )
+    
+    # run action
+    run_parser = flow_subparsers.add_parser('run', help='Execute a flow')
+    run_parser.add_argument('name', help='Name of the flow to run')
+    add_flow_execution_args(run_parser)
+    
+    # list action
+    list_parser = flow_subparsers.add_parser('list', help='List all flows')
+    
+    # show action
+    show_parser = flow_subparsers.add_parser('show', help='Show flow structure')
+    show_parser.add_argument('name', help='Name of the flow to show')
+    
+    # graph action
+    graph_parser = flow_subparsers.add_parser('graph', help='Show dependency graph')
+    graph_parser.add_argument('name', help='Name of the flow to graph')
+    
+    # test action
+    test_parser = flow_subparsers.add_parser('test', help='Dry-run validation')
+    test_parser.add_argument('name', help='Name of the flow to test')
+    
+    return flow_parser
+
+
+def add_chat_parser(subparsers):
+    """Add chat resource parser."""
+    chat_parser = subparsers.add_parser(
+        'chat',
+        help='Interactive conversations',
+        description='Manage interactive conversations'
+    )
+    
+    # Create action subparsers
+    chat_subparsers = chat_parser.add_subparsers(
+        dest='action',
+        help='Available actions',
+        metavar='<action>'
+    )
+    
+    # send action
+    send_parser = chat_subparsers.add_parser('send', help='Send a message')
+    send_parser.add_argument('message', help='Message to send')
+    send_parser.add_argument('--conversation-id', help='Use specific conversation')
+    add_chat_args(send_parser)
+    
+    # list action
+    list_parser = chat_subparsers.add_parser('list', help='List all conversations')
+    
+    # show action
+    show_parser = chat_subparsers.add_parser('show', help='Show conversation history')
+    show_parser.add_argument('conversation_id', help='Conversation ID to show')
+    
+    # delete action
+    delete_parser = chat_subparsers.add_parser('delete', help='Delete conversation')
+    delete_parser.add_argument('conversation_id', help='Conversation ID to delete')
+    
+    # interactive action
+    interactive_parser = chat_subparsers.add_parser('interactive', help='Start interactive curses-based chat')
+    interactive_parser.add_argument('--conversation-id', help='Use specific conversation')
+    interactive_parser.add_argument('--prompt-name', default='chat', help='Prompt to use for chat (default: chat)')
+    add_chat_args(interactive_parser)
+    
+    return chat_parser
+
+
+def add_config_parser(subparsers):
+    """Add config resource parser."""
+    config_parser = subparsers.add_parser(
+        'config',
+        help='System management',
+        description='Manage system configuration'
+    )
+    
+    # Create action subparsers
+    config_subparsers = config_parser.add_subparsers(
+        dest='action',
+        help='Available actions',
+        metavar='<action>'
+    )
+    
+    # show action
+    show_parser = config_subparsers.add_parser('show', help='Show current configuration')
+    
+    # set action
+    set_parser = config_subparsers.add_parser('set', help='Set configuration value')
+    set_parser.add_argument('key', help='Configuration key')
+    set_parser.add_argument('value', help='Configuration value')
+    
+    return config_parser
+
+
+def add_auth_parser(subparsers):
+    """Add auth resource parser."""
+    auth_parser = subparsers.add_parser(
+        'auth',
+        help='Authentication',
+        description='Manage authentication and API keys'
+    )
+    
+    # Create action subparsers
+    auth_subparsers = auth_parser.add_subparsers(
+        dest='action',
+        help='Available actions',
+        metavar='<action>'
+    )
+    
+    # login action
+    login_parser = auth_subparsers.add_parser('login', help='Set up API key')
+    login_parser.add_argument('provider', help='Provider name')
+    
+    # status action
+    status_parser = auth_subparsers.add_parser('status', help='Show auth status')
+    
+    return auth_parser
+
+
+def add_global_commands(subparsers):
+    """Add global discovery commands."""
+    # list command
+    list_parser = subparsers.add_parser(
+        'list',
+        help='List all prompts and flows',
+        description='Discover everything available'
+    )
+    
+    # search command
+    search_parser = subparsers.add_parser(
+        'search',
+        help='Search by keyword',
+        description='Search prompts and flows by keyword'
+    )
+    search_parser.add_argument('keyword', help='Search keyword')
+
+
+def add_common_prompt_args(parser):
+    """Add common arguments for prompt commands."""
+    parser.add_argument(
+        '--prompts-dir',
         default=Config.DEFAULT_PROMPTS_DIR,
-        help="Directory where prompt YAML files live",
+        help='Directory where prompt YAML files live'
     )
-    pre_parser.add_argument(
-        "--info",
-        action="store_true",
-        help="Show detailed information about the prompt and its parameters",
-    )
-    pre_parser.add_argument(
-        "--chat",
-        action="store_true",
-        help="Launch interactive chat interface",
-    )
-    pre_parser.add_argument(
-        "--list-conversations",
-        action="store_true",
-        help="List all conversations and exit",
-    )
-    pre_parser.add_argument(
-        "--delete-conversation",
-        metavar="ID",
-        help="Delete a specific conversation and exit",
-    )
-    pre_parser.add_argument(
-        "--show-conversation",
-        metavar="ID",
-        help="Show messages from a specific conversation and exit",
-    )
-    pre_parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Enable verbose logging output"
-    )
-    pre_parser.add_argument(
-        "--quiet", "-q", action="store_true", help="Suppress progress output (only show errors)"
-    )
-    pre_args, remaining_argv = pre_parser.parse_known_args()
+    
 
-    # Configure logging based on verbose setting
-    configure_console_logging(verbose=pre_args.verbose)
-
-    logger.debug(f"CLI started with prompt: {pre_args.prompt}")
-    logger.debug(f"Verbose mode: {pre_args.verbose}")
-    logger.debug(f"Prompts directory: {pre_args.prompts_dir}")
-
-    # Handle conversation management commands
-    if pre_args.list_conversations:
-        list_conversations_command(pre_args.prompts_dir)
-        return
-
-    if pre_args.delete_conversation:
-        delete_conversation_command(pre_args.delete_conversation)
-        return
-
-    if pre_args.show_conversation:
-        show_conversation_command(pre_args.show_conversation)
-        return
-
-    # If --chat requested, launch interactive interface
-    if pre_args.chat:
-        logger.debug("Launching interactive chat interface")
-        # Parse remaining args for Orac configuration
-        parser = argparse.ArgumentParser(add_help=False)
-        parser.add_argument("--model-name", help="Override model_name for the LLM")
-        parser.add_argument("--api-key", help="Override API key for LLM")
-        parser.add_argument(
-            "--provider",
-            choices=["openai", "google", "anthropic", "azure", "openrouter", "custom"],
-            help="Select LLM provider",
-        )
-        parser.add_argument("--base-url", help="Custom base URL")
-        parser.add_argument("--generation-config", help="JSON string for generation_config")
-        parser.add_argument("--conversation-id", help="Specify conversation ID")
-
-        args, _ = parser.parse_known_args(remaining_argv)
-
-        # Parse generation config if provided
-        gen_config = None
-        if args.generation_config:
-            try:
-                gen_config = json.loads(args.generation_config)
-            except Exception as e:
-                print(f"Error: generation_config is not valid JSON: {e}", file=sys.stderr)
-                sys.exit(1)
-
-        # Launch chat interface
-        start_chat_interface(
-            prompt_name=pre_args.prompt,
-            prompts_dir=pre_args.prompts_dir,
-            conversation_id=args.conversation_id,
-            model_name=args.model_name,
-            api_key=args.api_key,
-            provider=args.provider,
-            base_url=args.base_url,
-            generation_config=gen_config,
-            verbose=pre_args.verbose,
-        )
-        return
-
-    # If --info requested, show info and exit
-    if pre_args.info:
-        logger.debug("Info mode requested")
-        show_prompt_info(pre_args.prompts_dir, pre_args.prompt)
-        return
-
-    spec = load_prompt_spec(pre_args.prompts_dir, pre_args.prompt)
-    params_spec = spec.get("parameters", [])
-
-    parser = argparse.ArgumentParser(
-        prog=os.path.basename(sys.argv[0]),
-        description=spec.get("description", f"Run prompt '{pre_args.prompt}'"),
-        parents=[pre_parser],
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-
-    # Global overrides
-    parser.add_argument("--model-name", help="Override model_name for the LLM")
-    parser.add_argument("--api-key", help="Override API key for LLM")
+def add_common_flow_args(parser):
+    """Add common arguments for flow commands."""
     parser.add_argument(
-        "--provider",
-        choices=["openai", "google", "anthropic", "azure", "openrouter", "custom"],
-        help="Select LLM provider (openai|google|anthropic|azure|openrouter|custom)",
+        '--flows-dir',
+        default=Config.DEFAULT_FLOWS_DIR,
+        help='Directory where flow YAML files live'
     )
     parser.add_argument(
-        "--base-url", help="Custom base URL for CUSTOM provider or to override default"
-    )
-    parser.add_argument("--generation-config", help="JSON string for generation_config")
-    parser.add_argument(
-        "--file",
-        action="append",
-        dest="files",
-        help="Add file(s) to the request (can be used multiple times)",
-    )
-    # Remote file URLs
-    parser.add_argument(
-        "--file-url",
-        action="append",
-        dest="file_urls",
-        help="Download remote file(s) via URL (can be used multiple times)",
-    )
-    parser.add_argument(
-        "--output", "-o", help="Write output to specified file instead of stdout"
-    )
-    # Structured JSON output
-    parser.add_argument(
-        "--json-output",
-        action="store_true",
-        help="Request strict JSON output (sets response_mime_type=application/json)",
-    )
-    parser.add_argument(
-        "--response-schema",
-        metavar="FILE",
-        help="Path to JSON schema file for response_schema (OpenAPI style)",
-    )
-    # Conversation mode flags
-    parser.add_argument(
-        "--conversation-id",
-        help="Specify conversation ID (auto-generated if not provided)",
-    )
-    parser.add_argument(
-        "--reset-conversation",
-        action="store_true",
-        help="Reset conversation before starting",
-    )
-    parser.add_argument(
-        "--no-save",
-        action="store_true",
-        help="Don't save messages to conversation history",
+        '--prompts-dir',
+        default=Config.DEFAULT_PROMPTS_DIR,
+        help='Directory where prompt YAML files live'
     )
 
-    # Add parameters from the prompt spec with enhanced type support
+
+def add_prompt_execution_args(parser):
+    """Add execution-specific arguments for prompts."""
+    # Provider-specific options (global flags already added at top level)
+    parser.add_argument('--base-url', help='Custom base URL')
+    parser.add_argument('--generation-config', help='JSON string for generation_config')
+    
+    # File attachments
+    parser.add_argument(
+        '--file',
+        action='append',
+        dest='files',
+        help='Add file(s) to the request (can be used multiple times)'
+    )
+    parser.add_argument(
+        '--file-url',
+        action='append', 
+        dest='file_urls',
+        help='Download remote file(s) via URL (can be used multiple times)'
+    )
+    
+    # Output options (--output is global, don't duplicate)
+    parser.add_argument(
+        '--json-output',
+        action='store_true',
+        help='Format response as JSON'
+    )
+    parser.add_argument(
+        '--response-schema',
+        metavar='FILE',
+        help='Validate against JSON schema'
+    )
+    
+    # Conversation options (for prompt commands that support conversation mode)
+    parser.add_argument('--conversation-id', help='Specify conversation ID')
+    parser.add_argument(
+        '--reset-conversation',
+        action='store_true',
+        help='Reset conversation before starting'
+    )
+    parser.add_argument(
+        '--no-save',
+        action='store_true',
+        help="Don't save messages to conversation history"
+    )
+
+
+def add_flow_execution_args(parser):
+    """Add execution-specific arguments for flows."""
+    parser.add_argument('--dry-run', action='store_true', help='Show execution plan without running')
+    parser.add_argument('--output', '-o', help='Write output to file')
+    parser.add_argument('--json-output', action='store_true', help='Format final output as JSON')
+
+
+def add_chat_args(parser):
+    """Add chat-specific arguments."""
+    parser.add_argument('--reset-conversation', action='store_true', help='Reset conversation before sending')
+    parser.add_argument('--no-save', action='store_true', help="Don't save message to conversation history")
+    # Add LLM configuration args
+    parser.add_argument('--model-name', help='Override model_name')
+    parser.add_argument('--api-key', help='Override API key')
+    parser.add_argument(
+        '--provider',
+        choices=['openai', 'google', 'anthropic', 'azure', 'openrouter', 'custom'],
+        help='Select LLM provider'
+    )
+    parser.add_argument('--base-url', help='Custom base URL')
+    parser.add_argument('--generation-config', help='JSON string for generation_config')
+
+
+def handle_shortcuts_and_parse(parser):
+    """Handle shortcuts and aliases before parsing."""
+    argv = sys.argv[1:]
+    
+    # Handle shortcuts - map old commands to new structure
+    if len(argv) > 0:
+        first_arg = argv[0]
+        
+        # Ultra-short aliases
+        if first_arg == 'r' and len(argv) > 1:
+            argv = ['prompt', 'run'] + argv[1:]
+        elif first_arg == 'f' and len(argv) > 1:
+            argv = ['flow', 'run'] + argv[1:]
+        elif first_arg == 'c' and len(argv) > 1:
+            argv = ['chat', 'send'] + argv[1:]
+        elif first_arg == 'i':
+            argv = ['chat', 'interactive'] + argv[1:]
+        # Regular shortcuts
+        elif first_arg == 'run' and len(argv) > 1:
+            argv = ['prompt', 'run'] + argv[1:]
+        elif first_arg == 'ask' and len(argv) > 1:
+            argv = ['chat', 'send'] + argv[1:]
+        elif first_arg == 'interactive':
+            argv = ['chat', 'interactive'] + argv[1:]
+        # Flow shortcut - 'orac flow research' -> 'orac flow run research'
+        elif first_arg == 'flow' and len(argv) > 1 and argv[1] not in ['run', 'list', 'show', 'graph', 'test']:
+            argv = ['flow', 'run'] + argv[1:]
+        # Legacy single-prompt mode (no resource specified)
+        elif first_arg not in ['prompt', 'flow', 'chat', 'config', 'auth', 'list', 'search'] and not first_arg.startswith('-'):
+            # Assume it's a prompt name - convert to new format
+            argv = ['prompt', 'run'] + argv
+    
+    # Parse with modified argv
+    try:
+        return parser.parse_known_args(argv)
+    except SystemExit:
+        # If parsing fails, show help
+        parser.print_help()
+        sys.exit(1)
+
+
+def handle_prompt_commands(args):
+    """Handle prompt resource commands."""
+    if args.action == 'run':
+        execute_prompt(args)
+    elif args.action == 'list':
+        list_prompts_command(args.prompts_dir)
+    elif args.action == 'show':
+        show_prompt_info(args.prompts_dir, args.name)
+    elif args.action == 'validate':
+        validate_prompt_command(args.prompts_dir, args.name)
+    else:
+        print(f"Unknown prompt action: {args.action}", file=sys.stderr)
+        sys.exit(1)
+
+
+def handle_flow_commands(args):
+    """Handle flow resource commands."""
+    if args.action == 'run':
+        execute_flow(args)
+    elif args.action == 'list':
+        list_flows_command(args.flows_dir)
+    elif args.action == 'show':
+        show_flow_info(args.flows_dir, args.name)
+    elif args.action == 'graph':
+        show_flow_graph(args.flows_dir, args.name)
+    elif args.action == 'test':
+        test_flow_command(args.flows_dir, args.name, dry_run=True)
+    else:
+        print(f"Unknown flow action: {args.action}", file=sys.stderr)
+        sys.exit(1)
+
+
+def handle_chat_commands(args):
+    """Handle chat resource commands."""
+    if args.action == 'send':
+        send_chat_message(args)
+    elif args.action == 'list':
+        list_conversations_command('')
+    elif args.action == 'show':
+        show_conversation_command(args.conversation_id)
+    elif args.action == 'delete':
+        delete_conversation_command(args.conversation_id)
+    elif args.action == 'interactive':
+        handle_chat_interactive(args)
+    else:
+        print(f"Unknown chat action: {args.action}", file=sys.stderr)
+        sys.exit(1)
+
+
+def handle_config_commands(args):
+    """Handle config resource commands."""
+    if args.action == 'show':
+        show_config_command()
+    elif args.action == 'set':
+        set_config_command(args.key, args.value)
+    else:
+        print(f"Unknown config action: {args.action}", file=sys.stderr)
+        sys.exit(1)
+
+
+def handle_auth_commands(args):
+    """Handle auth resource commands."""
+    if args.action == 'login':
+        auth_login_command(args.provider)
+    elif args.action == 'status':
+        auth_status_command()
+    else:
+        print(f"Unknown auth action: {args.action}", file=sys.stderr)
+        sys.exit(1)
+
+
+def handle_global_commands(args):
+    """Handle global discovery commands."""
+    if args.resource == 'list':
+        list_all_command()
+    elif args.resource == 'search':
+        search_command(args.keyword)
+    else:
+        print(f"Unknown global command: {args.resource}", file=sys.stderr)
+        sys.exit(1)
+
+
+# ==============================================================================
+# Command Implementation Functions
+# ==============================================================================
+
+def execute_prompt(args):
+    """Execute a prompt with dynamic parameter loading."""
+    # Load prompt spec to get parameters
+    spec = load_prompt_spec(args.prompts_dir, args.name)
+    params_spec = spec.get('parameters', [])
+    
+    # Create a new parser for this specific prompt with its parameters
+    prompt_parser = argparse.ArgumentParser(add_help=False)
+    add_prompt_execution_args(prompt_parser)
+    
+    # Add parameters from the prompt spec
     for param in params_spec:
-        add_parameter_argument(parser, param)
-
-    # Add usage examples to help
-    if params_spec:
-        examples = ["\nExamples:"]
-        examples.append(
-            f"  python cli.py {pre_args.prompt} --info  # Show parameter details"
-        )
-        examples.append(
-            f"  python cli.py {pre_args.prompt} --chat  # Interactive chat mode"
-        )
-
-        # Basic example
-        required_params = [
-            p for p in params_spec if p.get("required", "default" not in p)
-        ]
-        if required_params:
-            basic_args = []
-            for param in required_params[:2]:  # Show first 2 required params
-                arg_name = f"--{param['name'].replace('_', '-')}"
-                basic_args.append(f"{arg_name} example")
-            examples.append(f"  python cli.py {pre_args.prompt} {' '.join(basic_args)}")
-
-        parser.epilog = "\n".join(examples)
-
-    args = parser.parse_args()
-
-    logger.debug(f"Parsed arguments: {vars(args)}")
-
+        add_parameter_argument(prompt_parser, param)
+    
+    # Parse remaining args to get parameter values
+    remaining_args = sys.argv[4:]  # Skip 'orac prompt run promptname'
+    prompt_args = prompt_parser.parse_args(remaining_args)
+    
     # Parse JSON overrides
     def _safe_json(label: str, s: str):
         try:
@@ -798,22 +925,22 @@ def run_prompt_interface():
             sys.exit(1)
 
     gen_config = (
-        _safe_json("generation_config", args.generation_config)
-        if args.generation_config
+        _safe_json("generation_config", prompt_args.generation_config)
+        if getattr(prompt_args, 'generation_config', None)
         else {}
     )
 
     # Structured output injection
-    if args.json_output:
+    if getattr(prompt_args, 'json_output', False):
         gen_config = gen_config or {}
         gen_config["response_mime_type"] = "application/json"
 
-    if args.response_schema:
+    if getattr(prompt_args, 'response_schema', None):
         try:
-            with open(args.response_schema, "r", encoding="utf-8") as f:
+            with open(prompt_args.response_schema, "r", encoding="utf-8") as f:
                 schema_json = json.load(f)
         except Exception as e:
-            logger.error(f"Failed to read schema file '{args.response_schema}': {e}")
+            logger.error(f"Failed to read schema file '{prompt_args.response_schema}': {e}")
             print(f"Error reading schema file: {e}", file=sys.stderr)
             sys.exit(1)
         gen_config = gen_config or {}
@@ -823,51 +950,50 @@ def run_prompt_interface():
     param_values = {}
     for param in params_spec:
         name = param["name"]
-        cli_value = getattr(args, name)
+        cli_value = getattr(prompt_args, name, None)
         param_type = param.get("type", "string")
 
         if cli_value is not None:
-            # Convert CLI string to appropriate type
             converted_value = convert_cli_value(cli_value, param_type, name)
             param_values[name] = converted_value
 
     logger.debug(f"Final parameter values: {param_values}")
 
-    # Instantiate wrapper and call
+    # Create Orac instance and execute
     try:
         logger.debug("Creating Orac instance")
         
         # Create progress reporter if not quiet
         progress_callback = None
-        if not getattr(args, 'quiet', False):
-            reporter = create_cli_reporter(verbose=args.verbose, quiet=getattr(args, 'quiet', False))
+        if not args.quiet:
+            reporter = create_cli_reporter(verbose=args.verbose, quiet=args.quiet)
             progress_callback = reporter.report
         
         wrapper = Orac(
-            prompt_name=args.prompt,
+            prompt_name=args.name,
             prompts_dir=args.prompts_dir,
             model_name=args.model_name,
             api_key=args.api_key,
             generation_config=gen_config or None,
             verbose=args.verbose,
-            files=args.files,
-            file_urls=args.file_urls,
+            files=getattr(prompt_args, 'files', None),
+            file_urls=getattr(prompt_args, 'file_urls', None),
             provider=args.provider,
-            base_url=args.base_url,
-            conversation_id=args.conversation_id,
-            auto_save=not args.no_save,
+            base_url=getattr(prompt_args, 'base_url', None),
+            conversation_id=getattr(prompt_args, 'conversation_id', None),
+            auto_save=not getattr(prompt_args, 'no_save', False),
             progress_callback=progress_callback,
         )
 
         # Reset conversation if requested
-        if args.reset_conversation and hasattr(args, 'conversation') and args.conversation:
+        if getattr(prompt_args, 'reset_conversation', False):
             wrapper.reset_conversation()
             logger.info("Reset conversation history")
 
         logger.debug("Calling completion method")
         result = wrapper.completion(**param_values)
 
-        # Output result to file or stdout
+        # Output result
         if args.output:
             try:
                 with open(args.output, "w", encoding="utf-8") as f:
@@ -875,22 +1001,479 @@ def run_prompt_interface():
                 logger.info(f"Output written to file: {args.output}")
             except IOError as e:
                 logger.error(f"Error writing to output file '{args.output}': {e}")
-                print(
-                    f"Error writing to output file '{args.output}': {e}",
-                    file=sys.stderr,
-                )
+                print(f"Error writing to output file '{args.output}': {e}", file=sys.stderr)
                 sys.exit(1)
         else:
-            # Output only the result (no additional formatting)
             print(result)
 
         logger.info("Successfully completed prompt execution")
 
     except Exception as e:
         logger.error(f"Error running prompt: {e}")
-        # Always show critical errors to user, regardless of verbose mode
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
+
+
+def execute_flow(args):
+    """Execute a flow with dynamic parameter loading."""
+    flow_path = Path(args.flows_dir) / f"{args.name}.yaml"
+    
+    try:
+        spec = load_flow(flow_path)
+        
+        # Create a new parser for this specific flow with its parameters
+        flow_parser = argparse.ArgumentParser(add_help=False)
+        add_flow_execution_args(flow_parser)
+        
+        # Add flow inputs as parameters
+        for flow_input in spec.inputs:
+            add_flow_input_argument(flow_parser, flow_input)
+        
+        # Parse remaining args
+        remaining_args = sys.argv[4:]  # Skip 'orac flow run flowname'
+        flow_args = flow_parser.parse_args(remaining_args)
+        
+        # Create progress reporter if not quiet
+        progress_callback = None
+        if not args.quiet:
+            reporter = create_cli_reporter(verbose=args.verbose, quiet=args.quiet)
+            progress_callback = reporter.report
+        
+        engine = FlowEngine(spec, prompts_dir=args.prompts_dir, progress_callback=progress_callback)
+        
+        # Collect input values from CLI args
+        inputs = {}
+        for flow_input in spec.inputs:
+            cli_value = getattr(flow_args, flow_input.name, None)
+            if cli_value is not None:
+                # Convert CLI string to appropriate type
+                converted_value = convert_cli_value(cli_value, flow_input.type, flow_input.name)
+                inputs[flow_input.name] = converted_value
+            elif flow_input.default is not None:
+                inputs[flow_input.name] = flow_input.default
+        
+        logger.debug(f"Flow inputs: {inputs}")
+        
+        # Execute flow
+        results = engine.execute(inputs, dry_run=getattr(flow_args, 'dry_run', False))
+        
+        if getattr(flow_args, 'dry_run', False):
+            print("DRY RUN - Flow execution plan:")
+            print(f"Execution order: {' -> '.join(engine.execution_order)}")
+            return
+        
+        # Output results
+        if args.output:
+            try:
+                with open(args.output, "w", encoding="utf-8") as f:
+                    if getattr(flow_args, 'json_output', False):
+                        json.dump(results, f, indent=2)
+                    else:
+                        for name, value in results.items():
+                            f.write(f"{name}: {value}\n")
+                logger.info(f"Flow output written to file: {args.output}")
+            except IOError as e:
+                logger.error(f"Error writing to output file '{args.output}': {e}")
+                print(f"Error writing to output file '{args.output}': {e}", file=sys.stderr)
+                sys.exit(1)
+        else:
+            if getattr(flow_args, 'json_output', False):
+                print(json.dumps(results, indent=2))
+            else:
+                for name, value in results.items():
+                    print(f"{name}: {value}")
+        
+        logger.info("Flow completed successfully")
+        
+    except (FlowValidationError, FlowExecutionError) as e:
+        logger.error(f"Flow error: {e}")
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"Unexpected error running flow: {e}")
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def list_prompts_command(prompts_dir: str):
+    """List available prompts."""
+    from pathlib import Path
+    
+    prompts_path = Path(prompts_dir)
+    if not prompts_path.exists():
+        print(f"Prompts directory not found: {prompts_dir}")
+        return
+    
+    yaml_files = list(prompts_path.glob('*.yaml')) + list(prompts_path.glob('*.yml'))
+    
+    if not yaml_files:
+        print(f"No prompts found in {prompts_dir}")
+        return
+    
+    print(f"\nAvailable prompts ({len(yaml_files)} total):")
+    print("-" * 80)
+    print(f"{'Name':20} {'Description':60}")
+    print("-" * 80)
+    
+    for yaml_file in sorted(yaml_files):
+        name = yaml_file.stem
+        try:
+            spec = load_prompt_spec(prompts_dir, name)
+            desc = spec.get('description', 'No description available')
+            desc = desc[:57] + "..." if len(desc) > 60 else desc
+            print(f"{name:20} {desc:60}")
+        except:
+            print(f"{name:20} {'(Error loading prompt)':60}")
+
+
+def validate_prompt_command(prompts_dir: str, prompt_name: str):
+    """Validate prompt YAML."""
+    try:
+        spec = load_prompt_spec(prompts_dir, prompt_name)
+        print(f"✓ Prompt '{prompt_name}' is valid")
+        
+        # Check for required fields
+        if 'prompt' not in spec:
+            print("⚠ Warning: No 'prompt' field found")
+        
+        if 'parameters' in spec:
+            params = spec['parameters']
+            if not isinstance(params, list):
+                print("⚠ Warning: 'parameters' should be a list")
+            else:
+                for i, param in enumerate(params):
+                    if not isinstance(param, dict):
+                        print(f"⚠ Warning: Parameter {i} should be a dictionary")
+                    elif 'name' not in param:
+                        print(f"⚠ Warning: Parameter {i} missing 'name' field")
+        
+        print(f"Validation complete for '{prompt_name}'")
+        
+    except Exception as e:
+        print(f"✗ Validation failed for '{prompt_name}': {e}")
+        sys.exit(1)
+
+
+def show_flow_graph(flows_dir: str, flow_name: str):
+    """Show dependency graph for a flow."""
+    flow_path = Path(flows_dir) / f"{flow_name}.yaml"
+    
+    try:
+        spec = load_flow(flow_path)
+        engine = FlowEngine(spec, prompts_dir=Config.DEFAULT_PROMPTS_DIR)
+        
+        print(f"\nDependency graph for flow '{flow_name}':")
+        print("-" * 50)
+        print(f"Execution order: {' -> '.join(engine.execution_order)}")
+        
+        print("\nStep dependencies:")
+        for step_name, step in spec.steps.items():
+            if step.depends_on:
+                deps = ', '.join(step.depends_on)
+                print(f"  {step_name} depends on: {deps}")
+            else:
+                print(f"  {step_name} (no dependencies)")
+                
+    except (FlowValidationError, FlowExecutionError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def test_flow_command(flows_dir: str, flow_name: str, dry_run=True):
+    """Test/validate a flow with dry run."""
+    flow_path = Path(flows_dir) / f"{flow_name}.yaml"
+    
+    try:
+        spec = load_flow(flow_path)
+        engine = FlowEngine(spec, prompts_dir=Config.DEFAULT_PROMPTS_DIR)
+        
+        print(f"\n✓ Flow '{flow_name}' validation successful")
+        print(f"Steps: {len(spec.steps)}")
+        print(f"Inputs: {len(spec.inputs)}")
+        print(f"Outputs: {len(spec.outputs)}")
+        print(f"Execution order: {' -> '.join(engine.execution_order)}")
+        
+        # Test with empty inputs to validate structure
+        test_inputs = {}
+        for inp in spec.inputs:
+            if inp.default is not None:
+                test_inputs[inp.name] = inp.default
+        
+        if dry_run:
+            print("\nDry run test passed - flow structure is valid")
+        
+    except (FlowValidationError, FlowExecutionError) as e:
+        print(f"✗ Flow test failed: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def handle_chat_interactive(args):
+    """Start interactive curses-based chat interface."""
+    # Parse generation config if provided
+    gen_config = None
+    if getattr(args, 'generation_config', None):
+        try:
+            gen_config = json.loads(args.generation_config) 
+        except Exception as e:
+            print(f"Error: generation_config is not valid JSON: {e}", file=sys.stderr)
+            sys.exit(1)
+    
+    try:
+        # Prepare arguments for the Orac instance
+        # Note: use_conversation is hardcoded to True in start_chat_interface, so don't pass it here
+        orac_kwargs = {
+            'model_name': args.model_name,
+            'api_key': args.api_key,  
+            'provider': args.provider,
+            'base_url': getattr(args, 'base_url', None),
+            'generation_config': gen_config,
+            'auto_save': not getattr(args, 'no_save', False),
+        }
+        
+        # Remove None values to avoid passing them to Orac
+        orac_kwargs = {k: v for k, v in orac_kwargs.items() if v is not None}
+        
+        # Start the interactive chat interface
+        start_chat_interface(
+            prompt_name=args.prompt_name,
+            conversation_id=getattr(args, 'conversation_id', None),
+            **orac_kwargs
+        )
+        
+    except Exception as e:
+        logger.error(f"Error starting interactive chat: {e}")
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def send_chat_message(args):
+    """Send a chat message."""
+    # Parse generation config if provided
+    gen_config = None
+    if getattr(args, 'generation_config', None):
+        try:
+            gen_config = json.loads(args.generation_config) 
+        except Exception as e:
+            print(f"Error: generation_config is not valid JSON: {e}", file=sys.stderr)
+            sys.exit(1)
+    
+    # Create a simple chat prompt if needed
+    try:
+        from orac.orac import Orac
+        
+        # Create progress reporter if not quiet
+        progress_callback = None
+        if not args.quiet:
+            reporter = create_cli_reporter(verbose=args.verbose, quiet=args.quiet)
+            progress_callback = reporter.report
+        
+        wrapper = Orac(
+            prompt_name='chat',  # Assume a 'chat' prompt exists
+            model_name=args.model_name,
+            api_key=args.api_key,
+            provider=args.provider,
+            base_url=getattr(args, 'base_url', None),
+            generation_config=gen_config,
+            conversation_id=getattr(args, 'conversation_id', None),
+            auto_save=not getattr(args, 'no_save', False),
+            progress_callback=progress_callback,
+        )
+        
+        # Reset conversation if requested
+        if getattr(args, 'reset_conversation', False):
+            wrapper.reset_conversation()
+            logger.info("Reset conversation history")
+        
+        result = wrapper.completion(message=args.message)
+        
+        # Output result
+        if args.output:
+            try:
+                with open(args.output, "w", encoding="utf-8") as f:
+                    f.write(result)
+                logger.info(f"Output written to file: {args.output}")
+            except IOError as e:
+                logger.error(f"Error writing to output file '{args.output}': {e}")
+                print(f"Error writing to output file '{args.output}': {e}", file=sys.stderr)
+                sys.exit(1)
+        else:
+            print(result)
+        
+    except Exception as e:
+        logger.error(f"Error sending chat message: {e}")
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def show_config_command():
+    """Show current configuration."""
+    print("Current Orac Configuration:")
+    print("-" * 30)
+    
+    # Show environment variables
+    env_vars = [
+        'ORAC_LLM_PROVIDER',
+        'ORAC_DEFAULT_MODEL_NAME', 
+        'ORAC_LOG_FILE',
+        'GOOGLE_API_KEY',
+        'OPENAI_API_KEY',
+        'ANTHROPIC_API_KEY',
+        'AZURE_OPENAI_KEY',
+        'OPENROUTER_API_KEY',
+    ]
+    
+    for var in env_vars:
+        value = os.getenv(var)
+        if value:
+            # Mask API keys
+            if 'API_KEY' in var or 'KEY' in var:
+                display_value = value[:8] + '*' * (len(value) - 8) if len(value) > 8 else '*' * len(value)
+            else:
+                display_value = value
+            print(f"{var}: {display_value}")
+        else:
+            print(f"{var}: (not set)")
+    
+    # Show default directories
+    print(f"\nDefault directories:")
+    print(f"Prompts: {Config.DEFAULT_PROMPTS_DIR}")
+    print(f"Flows: {Config.DEFAULT_FLOWS_DIR}")
+    print(f"Conversations: {Config.CONVERSATION_DB}")
+
+
+def set_config_command(key: str, value: str):
+    """Set configuration value."""
+    # For now, just show what would be set
+    # In a full implementation, this might update a config file
+    print(f"Would set {key} = {value}")
+    print("Note: Currently, configuration is managed via environment variables.")
+    print(f"To set {key}, use: export {key}={value}")
+
+
+def auth_login_command(provider: str):
+    """Set up authentication for a provider."""
+    import getpass
+    
+    provider_vars = {
+        'google': 'GOOGLE_API_KEY',
+        'openai': 'OPENAI_API_KEY', 
+        'anthropic': 'ANTHROPIC_API_KEY',
+        'azure': 'AZURE_OPENAI_KEY',
+        'openrouter': 'OPENROUTER_API_KEY',
+    }
+    
+    if provider not in provider_vars:
+        print(f"Unknown provider: {provider}")
+        print(f"Supported providers: {', '.join(provider_vars.keys())}")
+        sys.exit(1)
+    
+    env_var = provider_vars[provider]
+    
+    print(f"Setting up authentication for {provider}")
+    api_key = getpass.getpass(f"Enter your {provider} API key: ")
+    
+    if api_key:
+        print(f"\nTo use this API key, set the environment variable:")
+        print(f"export {env_var}={api_key}")
+        print(f"export ORAC_LLM_PROVIDER={provider}")
+        print("\nAdd these lines to your shell profile (~/.bashrc, ~/.zshrc, etc.) to make them permanent.")
+    else:
+        print("No API key provided.")
+
+
+def auth_status_command():
+    """Show authentication status."""
+    print("Authentication Status:")
+    print("-" * 25)
+    
+    provider = os.getenv('ORAC_LLM_PROVIDER')
+    if provider:
+        print(f"Current provider: {provider}")
+    else:
+        print("Current provider: (not set)")
+    
+    # Check API keys
+    providers = {
+        'google': 'GOOGLE_API_KEY',
+        'openai': 'OPENAI_API_KEY',
+        'anthropic': 'ANTHROPIC_API_KEY',
+        'azure': 'AZURE_OPENAI_KEY', 
+        'openrouter': 'OPENROUTER_API_KEY',
+    }
+    
+    print("\nAPI Key Status:")
+    for prov, env_var in providers.items():
+        key = os.getenv(env_var)
+        status = "✓ Set" if key else "✗ Not set"
+        print(f"  {prov:12}: {status}")
+
+
+def list_all_command():
+    """List all prompts and flows."""
+    print("All Available Resources:")
+    print("=" * 50)
+    
+    # List prompts
+    print("\nPROMPTS:")
+    list_prompts_command(Config.DEFAULT_PROMPTS_DIR)
+    
+    # List flows
+    print("\nFLOWS:")
+    list_flows_command(Config.DEFAULT_FLOWS_DIR)
+
+
+def search_command(keyword: str):
+    """Search prompts and flows by keyword."""
+    print(f"Searching for '{keyword}'...")
+    print("=" * 50)
+    
+    found_any = False
+    
+    # Search prompts
+    prompts_path = Path(Config.DEFAULT_PROMPTS_DIR)
+    if prompts_path.exists():
+        yaml_files = list(prompts_path.glob('*.yaml')) + list(prompts_path.glob('*.yml'))
+        
+        matching_prompts = []
+        for yaml_file in yaml_files:
+            name = yaml_file.stem
+            try:
+                spec = load_prompt_spec(Config.DEFAULT_PROMPTS_DIR, name)
+                # Search in name, description, and prompt text
+                search_text = f"{name} {spec.get('description', '')} {spec.get('prompt', '')}".lower()
+                if keyword.lower() in search_text:
+                    matching_prompts.append((name, spec.get('description', 'No description')))
+            except:
+                pass
+        
+        if matching_prompts:
+            print(f"\nMatching Prompts ({len(matching_prompts)}):")
+            for name, desc in matching_prompts:
+                desc = desc[:50] + "..." if len(desc) > 50 else desc
+                print(f"  {name:20} {desc}")
+            found_any = True
+    
+    # Search flows
+    flows_path = Path(Config.DEFAULT_FLOWS_DIR)
+    if flows_path.exists():
+        flows = list_flows(Config.DEFAULT_FLOWS_DIR)
+        
+        matching_flows = []
+        for flow in flows:
+            # Search in name and description
+            search_text = f"{flow['name']} {flow['description']}".lower()
+            if keyword.lower() in search_text:
+                matching_flows.append((flow['name'], flow['description']))
+        
+        if matching_flows:
+            print(f"\nMatching Flows ({len(matching_flows)}):")
+            for name, desc in matching_flows:
+                desc = desc[:50] + "..." if len(desc) > 50 else desc
+                print(f"  {name:20} {desc}")
+            found_any = True
+    
+    if not found_any:
+        print(f"No prompts or flows found matching '{keyword}'")
 
 
 if __name__ == "__main__":

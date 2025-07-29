@@ -20,7 +20,7 @@ class CLIProgressReporter:
     
     Features:
     - Timestamps for all events
-    - Step counting for workflows
+    - Step counting for flows
     - Emojis for visual clarity
     - Configurable verbosity levels
     - Error highlighting
@@ -47,14 +47,14 @@ class CLIProgressReporter:
         timestamp = event.timestamp.strftime("%H:%M:%S") if event.timestamp else "??:??:??"
         
         # Handle different event types
-        if event.type == ProgressType.WORKFLOW_START:
-            self._report_workflow_start(event, timestamp)
-        elif event.type == ProgressType.WORKFLOW_STEP_START:
-            self._report_workflow_step_start(event, timestamp)
-        elif event.type == ProgressType.WORKFLOW_STEP_COMPLETE:
-            self._report_workflow_step_complete(event, timestamp)
-        elif event.type == ProgressType.WORKFLOW_COMPLETE:
-            self._report_workflow_complete(event, timestamp)
+        if event.type == ProgressType.FLOW_START:
+            self._report_flow_start(event, timestamp)
+        elif event.type == ProgressType.FLOW_STEP_START:
+            self._report_flow_step_start(event, timestamp)
+        elif event.type == ProgressType.FLOW_STEP_COMPLETE:
+            self._report_flow_step_complete(event, timestamp)
+        elif event.type == ProgressType.FLOW_COMPLETE:
+            self._report_flow_complete(event, timestamp)
         elif event.type == ProgressType.PROMPT_START:
             self._report_prompt_start(event, timestamp)
         elif event.type == ProgressType.PROMPT_COMPLETE:
@@ -68,10 +68,10 @@ class CLIProgressReporter:
             
     def _error_types(self) -> set[ProgressType]:
         """Return set of error event types."""
-        return {ProgressType.PROMPT_ERROR, ProgressType.WORKFLOW_ERROR}
+        return {ProgressType.PROMPT_ERROR, ProgressType.FLOW_ERROR}
     
-    def _report_workflow_start(self, event: ProgressEvent, timestamp: str) -> None:
-        """Report workflow start."""
+    def _report_flow_start(self, event: ProgressEvent, timestamp: str) -> None:
+        """Report flow start."""
         print(f"\n🚀 {timestamp} - {event.message}", file=sys.stderr)
         if event.total_steps:
             print(f"   Total steps: {event.total_steps}", file=sys.stderr)
@@ -80,8 +80,8 @@ class CLIProgressReporter:
             if execution_order:
                 print(f"   Execution order: {' → '.join(execution_order)}", file=sys.stderr)
     
-    def _report_workflow_step_start(self, event: ProgressEvent, timestamp: str) -> None:
-        """Report workflow step start."""
+    def _report_flow_step_start(self, event: ProgressEvent, timestamp: str) -> None:
+        """Report flow step start."""
         if event.current_step and event.total_steps:
             progress = f"[{event.current_step}/{event.total_steps}]"
             percent = f"({event.progress_percentage:.0f}%)" if event.progress_percentage else ""
@@ -97,8 +97,8 @@ class CLIProgressReporter:
         
         self.last_step_time = event.timestamp
     
-    def _report_workflow_step_complete(self, event: ProgressEvent, timestamp: str) -> None:
-        """Report workflow step completion."""
+    def _report_flow_step_complete(self, event: ProgressEvent, timestamp: str) -> None:
+        """Report flow step completion."""
         duration_str = ""
         if self.last_step_time and event.timestamp:
             duration = (event.timestamp - self.last_step_time).total_seconds()
@@ -112,8 +112,8 @@ class CLIProgressReporter:
             if result_keys:
                 print(f"   Outputs: {', '.join(result_keys)}", file=sys.stderr)
     
-    def _report_workflow_complete(self, event: ProgressEvent, timestamp: str) -> None:
-        """Report workflow completion."""
+    def _report_flow_complete(self, event: ProgressEvent, timestamp: str) -> None:
+        """Report flow completion."""
         duration_str = ""
         if event.timestamp:
             total_duration = (event.timestamp - self.start_time).total_seconds()
@@ -207,17 +207,17 @@ class StreamingProgressReporter:
         elif event.type in (
             ProgressType.PROMPT_COMPLETE,
             ProgressType.API_REQUEST_COMPLETE,
-            ProgressType.WORKFLOW_STEP_COMPLETE
+            ProgressType.FLOW_STEP_COMPLETE
         ):
             self._clear_spinner()
             if self.verbose:
                 print(f"✅ {timestamp} - {event.message}")
-        elif event.type in (ProgressType.PROMPT_ERROR, ProgressType.WORKFLOW_ERROR):
+        elif event.type in (ProgressType.PROMPT_ERROR, ProgressType.FLOW_ERROR):
             self._clear_spinner()
             print(f"❌ {timestamp} - {event.message}", file=sys.stderr)
-        elif event.type == ProgressType.WORKFLOW_START:
+        elif event.type == ProgressType.FLOW_START:
             print(f"🚀 {timestamp} - {event.message}")
-        elif event.type == ProgressType.WORKFLOW_COMPLETE:
+        elif event.type == ProgressType.FLOW_COMPLETE:
             print(f"🎉 {timestamp} - {event.message}")
     
     def _show_spinner(self) -> None:

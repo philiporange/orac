@@ -1,7 +1,7 @@
 """
 Comprehensive integration tests for the Orac class.
 
-These tests verify the full workflow from YAML loading through API calls,
+These tests verify the full flow from YAML loading through API calls,
 testing real parameter resolution, file handling, and response processing.
 """
 
@@ -15,12 +15,12 @@ from orac.orac import Orac
 
 
 class TestOracIntegration:
-    """Integration tests for the complete Orac workflow."""
+    """Integration tests for the complete Orac flow."""
 
     @pytest.mark.integration
     @patch('orac.orac.call_api')
-    def test_basic_prompt_workflow(self, mock_call_api, test_prompts_dir):
-        """Test complete workflow with basic prompt."""
+    def test_basic_prompt_flow(self, mock_call_api, test_prompts_dir):
+        """Test complete flow with basic prompt."""
         mock_call_api.return_value = "Paris"
         
         orac = Orac("capital", prompts_dir=str(test_prompts_dir))
@@ -76,8 +76,8 @@ parameters:
 
     @pytest.mark.integration
     @patch('orac.orac.call_api')
-    def test_json_response_workflow(self, mock_call_api, test_prompts_dir):
-        """Test JSON response handling workflow."""
+    def test_json_response_flow(self, mock_call_api, test_prompts_dir):
+        """Test JSON response handling flow."""
         mock_response = {
             "title": "Chocolate Chip Cookies",
             "ingredients": ["flour", "sugar", "chocolate chips"],
@@ -99,8 +99,8 @@ parameters:
 
     @pytest.mark.integration
     @patch('orac.orac.call_api')
-    def test_file_attachment_workflow(self, mock_call_api, temp_dir):
-        """Test file attachment and processing workflow."""
+    def test_file_attachment_flow(self, mock_call_api, temp_dir):
+        """Test file attachment and processing flow."""
         mock_call_api.return_value = "File processed successfully"
         
         # Create test files

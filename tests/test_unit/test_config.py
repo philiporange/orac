@@ -40,7 +40,7 @@ class TestConfig:
         assert isinstance(Config.PACKAGE_DIR, Path)
         assert isinstance(Config.PROJECT_ROOT, Path)
         assert isinstance(Config.DEFAULT_PROMPTS_DIR, Path)
-        assert isinstance(Config.DEFAULT_WORKFLOWS_DIR, Path)
+        assert isinstance(Config.DEFAULT_FLOWS_DIR, Path)
         assert isinstance(Config.LOG_FILE, Path)
 
     @pytest.mark.unit

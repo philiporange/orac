@@ -73,8 +73,8 @@ class Config:
     DEFAULT_PROMPTS_DIR: Final[Path] = Path(
         os.getenv("ORAC_DEFAULT_PROMPTS_DIR", PACKAGE_DIR / "prompts")
     )
-    DEFAULT_WORKFLOWS_DIR: Final[Path] = Path(
-        os.getenv("ORAC_DEFAULT_WORKFLOWS_DIR", PACKAGE_DIR / "workflows")
+    DEFAULT_FLOWS_DIR: Final[Path] = Path(
+        os.getenv("ORAC_DEFAULT_FLOWS_DIR", PACKAGE_DIR / "flows")
     )
     DEFAULT_CONFIG_FILE: Final[Path] = Path(
         os.getenv("ORAC_DEFAULT_CONFIG_FILE", PACKAGE_DIR / "config.yaml")

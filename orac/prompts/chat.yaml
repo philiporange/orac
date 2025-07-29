@@ -1,3 +1,4 @@
+description: "Interactive chat with a helpful AI assistant that maintains conversation context"
 model_name: "gemini-2.5-flash"
 generation_config:
     temperature: 0.7
