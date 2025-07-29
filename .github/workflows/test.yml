@@ -29,26 +29,26 @@ jobs:
         pip install -r requirements-dev.txt
     
     - name: Run quick unit tests
-      run: python run_tests.py --unit --quick --parallel 2
+      run: pytest -m "unit and not slow" -n 2
       env:
         ORAC_LLM_PROVIDER: google
         GOOGLE_API_KEY: fake_test_key
     
     - name: Run all unit tests with coverage
-      run: python run_tests.py --unit --coverage --parallel 2
+      run: pytest -m unit --cov=orac --cov-report=term-missing -n 2
       env:
         ORAC_LLM_PROVIDER: google
         GOOGLE_API_KEY: fake_test_key
     
     - name: Run integration tests
-      run: python run_tests.py --integration --parallel 2
+      run: pytest -m integration -n 2
       env:
         ORAC_LLM_PROVIDER: google
         GOOGLE_API_KEY: fake_test_key
     
     - name: Run E2E tests (Python 3.11 only)
       if: matrix.python-version == '3.11'
-      run: python run_tests.py --e2e
+      run: pytest -m e2e
       env:
         ORAC_LLM_PROVIDER: google
         GOOGLE_API_KEY: fake_test_key
@@ -56,9 +56,7 @@ jobs:
     - name: Generate coverage report
       if: matrix.python-version == '3.11'
       run: |
-        python run_tests.py --unit --html-coverage --parallel 2
-        # Generate XML coverage report for Codecov
-        pytest --cov=orac --cov-report=xml tests/test_unit
+        pytest -m unit --cov=orac --cov-report=html --cov-report=xml -n 2
       env:
         ORAC_LLM_PROVIDER: google
         GOOGLE_API_KEY: fake_test_key
@@ -70,9 +68,9 @@ jobs:
         files: ./coverage.xml
         fail_ci_if_error: false
 
-  compatibility:
+  validation:
     runs-on: ubuntu-latest
-    name: Test legacy test files still work
+    name: Validate test structure
     
     steps:
     - uses: actions/checkout@v4
@@ -86,21 +84,13 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install -r requirements-dev.txt
     
-    - name: Validate test structure
+    - name: Validate test structure and markers
       run: |
         echo "Validating test structure and markers..."
         pytest --collect-only --quiet tests/
         echo "Test structure validation passed"
-      env:
-        ORAC_LLM_PROVIDER: google
-        GOOGLE_API_KEY: fake_test_key
-    
-    - name: Run legacy tests
-      run: |
-        echo "Testing that legacy test files still work..."
-        # python test.py  # Uncomment when ready to phase out
-        echo "Legacy test compatibility check passed"
       env:
         ORAC_LLM_PROVIDER: google
         GOOGLE_API_KEY: fake_test_key
