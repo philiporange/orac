@@ -19,7 +19,7 @@ from orac.progress import (
 )
 from orac.cli_progress import CLIProgressReporter, StreamingProgressReporter, create_cli_reporter
 from orac.orac import Orac
-from orac.flow import FlowEngine, WorkflowSpec, WorkflowStep, WorkflowInput, WorkflowOutput
+from orac.flow import FlowEngine, FlowSpec, FlowStep, FlowInput, FlowOutput
 
 
 class TestProgressEvent:
@@ -75,7 +75,7 @@ class TestProgressEvent:
         """Test event serialization to dictionary."""
         event = ProgressEvent(
             type=ProgressType.FLOW_COMPLETE,
-            message="Workflow completed",
+            message="Flow completed",
             current_step=3,
             total_steps=3,
             metadata={"outputs": ["result1", "result2"]}
@@ -84,7 +84,7 @@ class TestProgressEvent:
         event_dict = event.to_dict()
         
         assert event_dict["type"] == "flow_complete"
-        assert event_dict["message"] == "Workflow completed"
+        assert event_dict["message"] == "Flow completed"
         assert event_dict["current_step"] == 3
         assert event_dict["total_steps"] == 3
         assert event_dict["progress_percentage"] == 100.0
@@ -130,7 +130,7 @@ class TestProgressTracker:
             ProgressEvent(ProgressType.PROMPT_START, "Start 1"),
             ProgressEvent(ProgressType.PROMPT_COMPLETE, "Complete 1"),
             ProgressEvent(ProgressType.PROMPT_START, "Start 2"),
-            ProgressEvent(ProgressType.FLOW_START, "Workflow start"),
+            ProgressEvent(ProgressType.FLOW_START, "Flow start"),
         ]
         
         for event in events:
@@ -192,7 +192,7 @@ class TestCLIProgressReporter:
         """Test flow event reporting."""
         reporter = CLIProgressReporter(verbose=True)
         
-        # Workflow start
+        # Flow start
         start_event = ProgressEvent(
             type=ProgressType.FLOW_START,
             message="Starting flow: test_flow",
@@ -207,7 +207,7 @@ class TestCLIProgressReporter:
         assert "Total steps: 2" in captured.err
         assert "step1 → step2" in captured.err
         
-        # Workflow step start
+        # Flow step start
         step_event = ProgressEvent(
             type=ProgressType.FLOW_STEP_START,
             message="Executing step: step1",
@@ -276,6 +276,9 @@ class TestStreamingProgressReporter:
         # Start event should trigger spinner
         start_event = ProgressEvent(ProgressType.PROMPT_START, "Processing...")
         reporter.report(start_event)
+        
+        # Add small delay to avoid the 0.1 second throttling
+        time.sleep(0.11)
         
         # Complete event should clear spinner and show completion
         complete_event = ProgressEvent(ProgressType.PROMPT_COMPLETE, "Done")

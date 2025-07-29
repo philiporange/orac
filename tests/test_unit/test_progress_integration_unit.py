@@ -10,7 +10,7 @@ from pathlib import Path
 
 from orac.progress import ProgressEvent, ProgressType, ProgressTracker
 from orac.orac import Orac
-from orac.flow import FlowEngine, WorkflowSpec, WorkflowStep, WorkflowInput, WorkflowOutput
+from orac.flow import FlowEngine, FlowSpec, FlowStep, FlowInput, FlowOutput
 
 
 class TestOracProgressIntegrationUnit:
@@ -154,17 +154,17 @@ class TestFlowEngineProgressUnit:
     
     def create_test_flow_spec(self):
         """Create a simple test flow spec."""
-        return WorkflowSpec(
+        return FlowSpec(
             name="test_flow",
             description="Test flow",
             inputs=[
-                WorkflowInput(name="input1", type="string", required=True)
+                FlowInput(name="input1", type="string", required=True)
             ],
             outputs=[
-                WorkflowOutput(name="output1", source="step1.result")
+                FlowOutput(name="output1", source="step1.result")
             ],
             steps={
-                "step1": WorkflowStep(
+                "step1": FlowStep(
                     name="step1",
                     prompt_name="test_prompt",
                     inputs={"param1": "${inputs.input1}"},
@@ -329,19 +329,19 @@ class TestFlowEngineProgressUnit:
     def test_flow_engine_multi_step_progress(self, mock_orac_class):
         """Test progress tracking for multi-step flow."""
         # Create multi-step flow
-        spec = WorkflowSpec(
+        spec = FlowSpec(
             name="multi_step_flow",
             description="Multi-step test",
-            inputs=[WorkflowInput(name="input1", type="string", required=True)],
-            outputs=[WorkflowOutput(name="final_output", source="step2.result")],
+            inputs=[FlowInput(name="input1", type="string", required=True)],
+            outputs=[FlowOutput(name="final_output", source="step2.result")],
             steps={
-                "step1": WorkflowStep(
+                "step1": FlowStep(
                     name="step1",
                     prompt_name="prompt1", 
                     inputs={"param": "${inputs.input1}"},
                     outputs=["result"]
                 ),
-                "step2": WorkflowStep(
+                "step2": FlowStep(
                     name="step2",
                     prompt_name="prompt2",
                     inputs={"param": "${step1.result}"},

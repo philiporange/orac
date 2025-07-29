@@ -85,7 +85,7 @@ class TestCLIProgressReporterBehavior:
             ProgressEvent(ProgressType.API_REQUEST_COMPLETE, "API call complete"),
             ProgressEvent(ProgressType.PROMPT_COMPLETE, "Prompt complete"),
             ProgressEvent(ProgressType.FLOW_STEP_COMPLETE, "Step complete"),
-            ProgressEvent(ProgressType.FLOW_COMPLETE, "Workflow complete"),
+            ProgressEvent(ProgressType.FLOW_COMPLETE, "Flow complete"),
         ]
         
         for event in non_error_events:
@@ -98,7 +98,7 @@ class TestCLIProgressReporterBehavior:
         # Error events should still show
         error_events = [
             ProgressEvent(ProgressType.PROMPT_ERROR, "Prompt failed"),
-            ProgressEvent(ProgressType.FLOW_ERROR, "Workflow failed"),
+            ProgressEvent(ProgressType.FLOW_ERROR, "Flow failed"),
         ]
         
         for event in error_events:
@@ -107,7 +107,7 @@ class TestCLIProgressReporterBehavior:
         captured = capsys.readouterr()
         assert "❌" in captured.err
         assert "Prompt failed" in captured.err
-        assert "Workflow failed" in captured.err
+        assert "Flow failed" in captured.err
     
     @pytest.mark.unit
     def test_verbose_mode_shows_all_events(self, capsys):
@@ -120,7 +120,7 @@ class TestCLIProgressReporterBehavior:
             ProgressEvent(ProgressType.API_REQUEST_START, "Making API call"),
             ProgressEvent(ProgressType.API_REQUEST_COMPLETE, "API call complete"),
             ProgressEvent(ProgressType.PROMPT_COMPLETE, "Prompt complete"),
-            ProgressEvent(ProgressType.FLOW_COMPLETE, "Workflow complete"),
+            ProgressEvent(ProgressType.FLOW_COMPLETE, "Flow complete"),
         ]
         
         for event in events:
@@ -145,12 +145,12 @@ class TestCLIProgressReporterBehavior:
         """Test that default mode shows flow events but not prompt details."""
         reporter = CLIProgressReporter(verbose=False)
         
-        # Workflow events should show
+        # Flow events should show
         flow_events = [
             ProgressEvent(ProgressType.FLOW_START, "Starting flow"),
             ProgressEvent(ProgressType.FLOW_STEP_START, "Starting step"),
             ProgressEvent(ProgressType.FLOW_STEP_COMPLETE, "Step complete"),
-            ProgressEvent(ProgressType.FLOW_COMPLETE, "Workflow complete"),
+            ProgressEvent(ProgressType.FLOW_COMPLETE, "Flow complete"),
         ]
         
         for event in flow_events:
@@ -227,7 +227,7 @@ class TestCLIProgressMetadataHandling:
         """Test that flow metadata is properly displayed."""
         reporter = CLIProgressReporter(verbose=True)
         
-        # Workflow start with execution order
+        # Flow start with execution order
         start_event = ProgressEvent(
             ProgressType.FLOW_START,
             "Starting flow: test_flow",

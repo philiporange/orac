@@ -28,7 +28,7 @@ class TestFlow:
         
         # Create a simple flow
         (flows_dir / "simple.yaml").write_text("""
-name: "Simple Test Workflow"
+name: "Simple Test Flow"
 description: "A minimal test flow"
 
 inputs:
@@ -54,7 +54,7 @@ steps:
         # Should load without error
         flow_path = flows_dir / "simple.yaml"
         flow = load_flow(str(flow_path))
-        assert flow.name == "Simple Test Workflow"
+        assert flow.name == "Simple Test Flow"
         assert len(flow.inputs) == 1
         assert len(flow.outputs) == 1
         assert len(flow.steps) == 1
@@ -67,14 +67,14 @@ steps:
         
         # Create test flows
         (flows_dir / "flow1.yaml").write_text("""
-name: "Workflow 1"
+name: "Flow 1"
 steps:
   step1:
     prompt: test
 """)
         
         (flows_dir / "flow2.yaml").write_text("""
-name: "Workflow 2" 
+name: "Flow 2" 
 steps:
   step1:
     prompt: test
@@ -147,7 +147,7 @@ steps:
         flows_dir.mkdir()
         
         (flows_dir / "error_test.yaml").write_text("""
-name: "Error Test Workflow"
+name: "Error Test Flow"
 inputs:
   - name: input
     type: string

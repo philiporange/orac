@@ -82,7 +82,7 @@ class TestProgressEventUnit:
         timestamp = datetime(2024, 1, 15, 14, 30, 45)
         event = ProgressEvent(
             type=ProgressType.FLOW_COMPLETE,
-            message="Workflow completed",
+            message="Flow completed",
             current_step=3,
             total_steps=3,
             step_name="final_step",
@@ -94,7 +94,7 @@ class TestProgressEventUnit:
         
         expected = {
             "type": "flow_complete",
-            "message": "Workflow completed",
+            "message": "Flow completed",
             "current_step": 3,
             "total_steps": 3,
             "step_name": "final_step",
@@ -286,7 +286,7 @@ class TestCLIProgressReporterUnit:
         # Error events should still show
         error_events = [
             ProgressEvent(ProgressType.PROMPT_ERROR, "Prompt failed"),
-            ProgressEvent(ProgressType.FLOW_ERROR, "Workflow failed"),
+            ProgressEvent(ProgressType.FLOW_ERROR, "Flow failed"),
         ]
         
         for event in error_events:
@@ -295,14 +295,14 @@ class TestCLIProgressReporterUnit:
         captured = capsys.readouterr()
         assert "❌" in captured.err
         assert "Prompt failed" in captured.err
-        assert "Workflow failed" in captured.err
+        assert "Flow failed" in captured.err
     
     @pytest.mark.unit
     def test_cli_reporter_verbose_mode(self, capsys):
         """Test verbose mode shows additional details."""
         reporter = CLIProgressReporter(verbose=True)
         
-        # Workflow step with metadata
+        # Flow step with metadata
         event = ProgressEvent(
             type=ProgressType.FLOW_STEP_START,
             message="Executing step: analyze",
@@ -355,7 +355,7 @@ class TestCLIProgressReporterUnit:
         )
         reporter.report(step1_complete)
         
-        # Workflow complete
+        # Flow complete
         flow_complete = ProgressEvent(
             type=ProgressType.FLOW_COMPLETE,
             message="Completed flow: test_flow",
@@ -504,11 +504,11 @@ class TestCreateSimpleCallbackUnit:
         captured = capsys.readouterr()
         
         # Verify expected outputs
-        assert "🚀" in captured.out  # Workflow start
+        assert "🚀" in captured.out  # Flow start
         assert "📝" in captured.out  # Step start
         assert "⏳" in captured.out  # Prompt start (verbose)
         assert "✅" in captured.out  # Completions
-        assert "🎉" in captured.out  # Workflow complete
+        assert "🎉" in captured.out  # Flow complete
     
     @pytest.mark.unit
     def test_create_simple_callback_non_verbose(self, capsys):
@@ -524,7 +524,7 @@ class TestCreateSimpleCallbackUnit:
         assert captured.out == ""  # Should be empty for non-verbose prompt events
         
         # But flow events should still show
-        callback(ProgressEvent(ProgressType.FLOW_START, "Workflow starting"))
+        callback(ProgressEvent(ProgressType.FLOW_START, "Flow starting"))
         
         captured = capsys.readouterr()
         assert "🚀" in captured.out
