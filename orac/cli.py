@@ -15,6 +15,7 @@ from orac.config import Config
 from orac.orac import Orac
 from orac.chat import start_chat_interface
 from orac.flow import load_flow, FlowEngine, list_flows, FlowValidationError, FlowExecutionError
+from orac.tools import load_tool, ToolEngine, list_tools, ToolValidationError, ToolExecutionError
 from orac.cli_progress import create_cli_reporter
 
 
@@ -460,6 +461,7 @@ def main():
     # Add resource parsers
     add_prompt_parser(subparsers)
     add_flow_parser(subparsers)
+    add_tool_parser(subparsers)
     add_chat_parser(subparsers)
     add_config_parser(subparsers)
     add_auth_parser(subparsers)
@@ -476,6 +478,8 @@ def main():
         handle_prompt_commands(args)
     elif args.resource == 'flow':
         handle_flow_commands(args)
+    elif args.resource == 'tool':
+        handle_tool_commands(args)
     elif args.resource == 'chat':
         handle_chat_commands(args)
     elif args.resource == 'config':  
@@ -566,6 +570,44 @@ def add_flow_parser(subparsers):
     test_parser.add_argument('name', help='Name of the flow to test')
     
     return flow_parser
+
+
+def add_tool_parser(subparsers):
+    """Add tool resource parser."""
+    tool_parser = subparsers.add_parser(
+        'tool',
+        help='Python script tools',
+        description='Execute and manage Python tools'
+    )
+
+    # Add common arguments
+    add_common_tool_args(tool_parser)
+
+    # Create action subparsers
+    tool_subparsers = tool_parser.add_subparsers(
+        dest='action',
+        help='Available actions',
+        metavar='<action>'
+    )
+
+    # run action
+    run_parser = tool_subparsers.add_parser('run', help='Execute a tool')
+    run_parser.add_argument('name', help='Name of the tool to run')
+    add_tool_execution_args(run_parser)
+
+    # list action
+    list_parser = tool_subparsers.add_parser('list', help='List all available tools')
+
+    # show action
+    show_parser = tool_subparsers.add_parser('show', help='Show tool details')
+    show_parser.add_argument('name', help='Name of the tool to show')
+
+    # validate action
+    validate_parser = tool_subparsers.add_parser('validate', help='Validate tool definition')
+    validate_parser.add_argument('name', help='Name of the tool to validate')
+
+    return tool_parser
+
 
 
 def add_chat_parser(subparsers):
@@ -700,6 +742,15 @@ def add_common_flow_args(parser):
         help='Directory where prompt YAML files live'
     )
 
+def add_common_tool_args(parser):
+    """Add common arguments for tool commands."""
+    parser.add_argument(
+        '--tools-dir',
+        default=Config.DEFAULT_TOOLS_DIR,
+        help='Directory where tool YAML files live'
+    )
+
+
 
 def add_prompt_execution_args(parser):
     """Add execution-specific arguments for prompts."""
@@ -752,6 +803,13 @@ def add_flow_execution_args(parser):
     parser.add_argument('--dry-run', action='store_true', help='Show execution plan without running')
     parser.add_argument('--output', '-o', help='Write output to file')
     parser.add_argument('--json-output', action='store_true', help='Format final output as JSON')
+
+
+def add_tool_execution_args(parser):
+    """Add execution-specific arguments for tools."""
+    parser.add_argument('--output', '-o', help='Write output to file')
+    parser.add_argument('--json-output', action='store_true', help='Format final output as JSON')
+
 
 
 def add_chat_args(parser):
@@ -841,6 +899,22 @@ def handle_flow_commands(args):
     else:
         print(f"Unknown flow action: {args.action}", file=sys.stderr)
         sys.exit(1)
+
+
+def handle_tool_commands(args):
+    """Handle tool resource commands."""
+    if args.action == 'run':
+        execute_tool(args)
+    elif args.action == 'list':
+        list_tools_command(args.tools_dir)
+    elif args.action == 'show':
+        show_tool_info(args.tools_dir, args.name)
+    elif args.action == 'validate':
+        validate_tool_command(args.tools_dir, args.name)
+    else:
+        print(f"Unknown tool action: {args.action}", file=sys.stderr)
+        sys.exit(1)
+
 
 
 def handle_chat_commands(args):
@@ -1474,6 +1548,141 @@ def search_command(keyword: str):
     
     if not found_any:
         print(f"No prompts or flows found matching '{keyword}'")
+
+def execute_tool(args):
+    """Execute a tool with dynamic parameter loading."""
+    tool_path = Path(args.tools_dir) / f"{args.name}.yaml"
+    try:
+        spec = load_tool(tool_path)
+        # Create a new parser for this specific tool with its parameters
+        tool_parser = argparse.ArgumentParser(add_help=False)
+        add_tool_execution_args(tool_parser)
+        # Add tool inputs as parameters
+        for tool_input in spec.inputs:
+            add_parameter_argument(tool_parser, tool_input.__dict__)
+        # Parse remaining args
+        remaining_args = sys.argv[4:]  # Skip 'orac tool run toolname'
+        tool_args = tool_parser.parse_args(remaining_args)
+        # Create progress reporter if not quiet
+        progress_callback = None
+        if not args.quiet:
+            reporter = create_cli_reporter(verbose=args.verbose, quiet=args.quiet)
+            progress_callback = reporter.report
+        engine = ToolEngine(spec, tools_dir=args.tools_dir, progress_callback=progress_callback)
+        # Collect input values from CLI args
+        inputs = {}
+        for tool_input in spec.inputs:
+            cli_value = getattr(tool_args, tool_input.name, None)
+            if cli_value is not None:
+                # Convert CLI string to appropriate type
+                converted_value = convert_cli_value(cli_value, tool_input.type, tool_input.name)
+                inputs[tool_input.name] = converted_value
+            elif tool_input.default is not None:
+                inputs[tool_input.name] = tool_input.default
+        logger.debug(f"Tool inputs: {inputs}")
+        # Execute tool
+        results = engine.execute(inputs)
+        # Output results
+        if args.output:
+            try:
+                with open(args.output, "w", encoding="utf-8") as f:
+                    if getattr(tool_args, 'json_output', False):
+                        json.dump(results, f, indent=2)
+                    else:
+                        print(results, file=f)
+                logger.info(f"Tool output written to file: {args.output}")
+            except IOError as e:
+                logger.error(f"Error writing to output file '{args.output}': {e}")
+                print(f"Error writing to output file '{args.output}': {e}", file=sys.stderr)
+                sys.exit(1)
+        else:
+            if getattr(tool_args, 'json_output', False):
+                print(json.dumps(results, indent=2))
+            else:
+                print(results)
+        logger.info("Tool completed successfully")
+    except (ToolValidationError, ToolExecutionError) as e:
+        logger.error(f"Tool error: {e}")
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"Unexpected error running tool: {e}")
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+def list_tools_command(tools_dir: str):
+    """List available tools."""
+    tools = list_tools(tools_dir)
+    if not tools:
+        print(f"No tools found in {tools_dir}")
+        return
+    print(f"\nAvailable tools ({len(tools)} total):")
+    print("-" * 80)
+    print(f"{'Name':20} {'Description':60}")
+    print("-" * 80)
+    for tool in tools:
+        name = tool['name']
+        desc = tool['description'][:57] + "..." if len(tool['description']) > 60 else tool['description']
+        print(f"{name:20} {desc:60}")
+
+def show_tool_info(tools_dir: str, tool_name: str):
+    """Show detailed information about a tool."""
+    tool_path = Path(tools_dir) / f"{tool_name}.yaml"
+    try:
+        spec = load_tool(tool_path)
+    except ToolValidationError as e:
+        print(f"Error loading tool: {e}", file=sys.stderr)
+        sys.exit(1)
+    banner = f"Tool: {spec.name}"
+    print(f"\n{banner}\n{'=' * len(banner)}")
+    if spec.description:
+        print(f"Description: {spec.description}\n")
+    if spec.inputs:
+        print(f"Inputs ({len(spec.inputs)}):")
+        for inp in spec.inputs:
+            status = "REQUIRED" if inp.required else "OPTIONAL"
+            print(f"  --{inp.name.replace('_', '-'):20} ({inp.type}) [{status}]")
+            if inp.description:
+                print(f"    {inp.description}")
+            if inp.default is not None:
+                print(f"    Default: {inp.default}")
+            print()
+    else:
+        print("No inputs defined.")
+    if spec.outputs:
+        print(f"Outputs ({len(spec.outputs)}):")
+        for out in spec.outputs:
+            print(f"  {out.name:20} ({out.type})")
+            if out.description:
+                print(f"    {out.description}")
+            print()
+    # Example usage
+    example = [f"orac tool run {tool_name}"]
+    for inp in spec.inputs:
+        if inp.required and inp.default is None:
+            flag = f"--{inp.name.replace('_', '-')}"
+            example.extend([flag, "'value'"])
+    print("Example usage:\n ", " ".join(example))
+
+def validate_tool_command(tools_dir: str, tool_name: str):
+    """Validate tool YAML."""
+    try:
+        tool_path = Path(tools_dir) / f"{tool_name}.yaml"
+        spec = load_tool(tool_path)
+        print(f"✓ Tool '{tool_name}' is valid")
+        # Check for required fields
+        if 'name' not in spec.__dict__:
+            print("⚠ Warning: No 'name' field found")
+        if 'description' not in spec.__dict__:
+            print("⚠ Warning: No 'description' field found")
+        if 'inputs' not in spec.__dict__:
+            print("⚠ Warning: No 'inputs' field found")
+        if 'outputs' not in spec.__dict__:
+            print("⚠ Warning: No 'outputs' field found")
+        print(f"Validation complete for '{tool_name}'")
+    except Exception as e:
+        print(f"✗ Validation failed for '{tool_name}': {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

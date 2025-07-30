@@ -172,6 +172,53 @@ steps:
 
 
 
+    @pytest.mark.integration
+    @patch('orac.orac.call_api')
+    def test_flow_with_tool_step(self, mock_call_api, temp_dir, test_prompts_dir, test_tools_dir):
+        """Test a flow that includes a tool step."""
+        mock_call_api.return_value = "Analyzed: 8.0"
+
+        flows_dir = temp_dir / "flows"
+        flows_dir.mkdir()
+
+        (flows_dir / "tool_flow.yaml").write_text("""
+name: "Tool Flow Test"
+description: "A flow that uses a tool"
+
+inputs:
+  - name: expression
+    type: string
+    required: true
+
+outputs:
+  - name: final_result
+    source: analyze_step.result
+
+steps:
+  calculate_step:
+    tool: calculator
+    inputs:
+      expression: ${inputs.expression}
+
+  analyze_step:
+    prompt: test_prompt
+    depends_on: [calculate_step]
+    inputs:
+      param: ${calculate_step.result}
+    outputs:
+      - result
+""")
+
+        flow = load_flow(str(flows_dir / "tool_flow.yaml"))
+        engine = FlowEngine(flow, prompts_dir=str(test_prompts_dir), tools_dir=str(test_tools_dir))
+
+        results = engine.execute(inputs={"expression": "4 * 2"})
+
+        assert "final_result" in results
+        assert results["final_result"] == "Analyzed: 8.0"
+        mock_call_api.assert_called_once()
+
+
 class TestFlowInputOutput:
     """Tests for flow input/output handling."""
 

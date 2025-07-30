@@ -28,6 +28,11 @@ class ProgressType(Enum):
     FLOW_COMPLETE = "flow_complete"
     FLOW_ERROR = "flow_error"
     
+    # Tool events
+    TOOL_START = "tool_start"
+    TOOL_COMPLETE = "tool_complete"
+    TOOL_ERROR = "tool_error"
+
     # API and file operation events
     API_REQUEST_START = "api_request_start"
     API_REQUEST_COMPLETE = "api_request_complete"

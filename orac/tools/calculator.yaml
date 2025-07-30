@@ -1,0 +1,37 @@
+name: calculator
+description: "Perform mathematical calculations and return results"
+version: "1.0.0"
+
+inputs:
+  - name: expression
+    type: string
+    description: "Mathematical expression to evaluate (e.g., '2 + 2 * 3')"
+    required: true
+
+  - name: precision
+    type: int
+    description: "Number of decimal places for the result"
+    default: 2
+    required: false
+
+outputs:
+  - name: result
+    type: float
+    description: "The calculated result"
+
+  - name: expression_tree
+    type: string
+    description: "String representation of the parsed expression"
+
+# Optional metadata
+metadata:
+  author: "Orac Team"
+  tags: ["math", "calculation", "utility"]
+  requirements: ["sympy>=1.9"]  # Additional pip packages needed
+
+# Optional security settings
+security:
+  timeout: 10  # Maximum execution time in seconds
+  memory_limit: "100MB"  # Maximum memory usage
+  allow_network: false  # Whether tool can make network requests
+  allow_filesystem: false  # Whether tool can access filesystem

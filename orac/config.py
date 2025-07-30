@@ -76,6 +76,9 @@ class Config:
     DEFAULT_FLOWS_DIR: Final[Path] = Path(
         os.getenv("ORAC_DEFAULT_FLOWS_DIR", PACKAGE_DIR / "flows")
     )
+    DEFAULT_TOOLS_DIR: Final[Path] = Path(
+        os.getenv("ORAC_DEFAULT_TOOLS_DIR", PACKAGE_DIR / "tools")
+    )
     DEFAULT_CONFIG_FILE: Final[Path] = Path(
         os.getenv("ORAC_DEFAULT_CONFIG_FILE", PACKAGE_DIR / "config.yaml")
     )

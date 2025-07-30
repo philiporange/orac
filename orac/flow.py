@@ -17,6 +17,7 @@ import networkx as nx
 
 from .logger import logger
 from .orac import Orac
+from .tools import ToolEngine, load_tool
 from .progress import ProgressCallback, ProgressEvent, ProgressType
 
 
@@ -42,9 +43,10 @@ class FlowOutput:
 class FlowStep:
     """Represents a single step in a flow."""
     name: str
-    prompt_name: str
-    inputs: Dict[str, str]  # Maps param_name -> template string
-    outputs: List[str]
+    prompt_name: Optional[str] = None
+    tool_name: Optional[str] = None
+    inputs: Dict[str, str] = field(default_factory=dict)
+    outputs: List[str] = field(default_factory=list)
     depends_on: List[str] = field(default_factory=list)
     when: Optional[str] = None  # Conditional execution (future feature)
 
@@ -73,9 +75,11 @@ class FlowEngine:
     """Executes flows by managing step dependencies and data flow."""
 
     def __init__(self, flow_spec: FlowSpec, prompts_dir: str = "prompts", 
+                 tools_dir: str = "tools",
                  progress_callback: Optional[ProgressCallback] = None):
         self.spec = flow_spec
         self.prompts_dir = prompts_dir
+        self.tools_dir = tools_dir
         self.progress_callback = progress_callback
         self.results: Dict[str, Dict[str, Any]] = {}
         self.graph = self._build_dependency_graph()
@@ -94,7 +98,7 @@ class FlowEngine:
         for step_name, step in self.spec.steps.items():
             for dep in step.depends_on:
                 if dep not in self.spec.steps:
-                    raise WorkflowValidationError(
+                    raise FlowValidationError(
                         f"Step '{step_name}' depends on unknown step '{dep}'"
                     )
                 graph.add_edge(dep, step_name)
@@ -105,7 +109,7 @@ class FlowEngine:
                 referenced_steps = self._extract_step_references(input_template)
                 for ref_step in referenced_steps:
                     if ref_step not in self.spec.steps:
-                        raise WorkflowValidationError(
+                        raise FlowValidationError(
                             f"Step '{step_name}' references unknown step '{ref_step}'"
                         )
                     if not graph.has_edge(ref_step, step_name):
@@ -113,7 +117,7 @@ class FlowEngine:
         
         # Check for cycles
         if not nx.is_directed_acyclic_graph(graph):
-            raise WorkflowValidationError("Workflow contains dependency cycles")
+            raise FlowValidationError("Workflow contains dependency cycles")
         
         logger.debug(f"Dependency graph built with {len(graph.nodes)} nodes and {len(graph.edges)} edges")
         return graph
@@ -130,7 +134,7 @@ class FlowEngine:
         try:
             return list(nx.topological_sort(self.graph))
         except nx.NetworkXError as e:
-            raise WorkflowValidationError(f"Failed to determine execution order: {e}")
+            raise FlowValidationError(f"Failed to determine execution order: {e}")
 
     def _resolve_template(self, template: str, context: Dict[str, Any]) -> str:
         """Resolve ${var} references in templates."""
@@ -146,7 +150,7 @@ class FlowEngine:
                     value = value[part]
                 return str(value)
             except (KeyError, TypeError) as e:
-                raise WorkflowExecutionError(
+                raise FlowExecutionError(
                     f"Failed to resolve template variable '{var_path}': {e}"
                 )
         
@@ -180,7 +184,7 @@ class FlowEngine:
                 current_step=step_index + 1,
                 total_steps=total_steps,
                 step_name=step_name,
-                metadata={"step_name": step_name, "prompt_name": step.prompt_name}
+                metadata={"step_name": step_name, "prompt_name": step.prompt_name, "tool_name": step.tool_name}
             ))
         
         # Resolve input templates
@@ -190,23 +194,32 @@ class FlowEngine:
         
         logger.debug(f"Step '{step_name}' resolved inputs: {resolved_inputs}")
         
-        # Execute the prompt
+        # Execute the prompt or tool
         try:
-            # Pass progress callback to Orac instance
-            orac = Orac(step.prompt_name, prompts_dir=self.prompts_dir,
-                       progress_callback=self.progress_callback)
-            result = orac(**resolved_inputs)
-            
-            # Handle different result types
-            if isinstance(result, dict):
-                step_results = result
-            else:
-                # For string results, create a dict with the first output name
-                if step.outputs:
-                    step_results = {step.outputs[0]: result}
+            if step.prompt_name:
+                # Execute a prompt step
+                orac = Orac(step.prompt_name, prompts_dir=self.prompts_dir,
+                           progress_callback=self.progress_callback)
+                result = orac(**resolved_inputs)
+                
+                # Handle different result types
+                if isinstance(result, dict):
+                    step_results = result
                 else:
-                    step_results = {'result': result}
-            
+                    # For string results, create a dict with the first output name
+                    if step.outputs:
+                        step_results = {step.outputs[0]: result}
+                    else:
+                        step_results = {'result': result}
+            elif step.tool_name:
+                # Execute a tool step
+                tool_path = Path(self.tools_dir) / f"{step.tool_name}.yaml"
+                tool_spec = load_tool(tool_path)
+                tool_engine = ToolEngine(tool_spec, tools_dir=self.tools_dir, progress_callback=self.progress_callback)
+                step_results = tool_engine.execute(resolved_inputs)
+            else:
+                raise FlowExecutionError(f"Step '{step_name}' has no prompt or tool defined.")
+
             logger.debug(f"Step '{step_name}' results: {step_results}")
             
             # Emit step completion progress
@@ -272,23 +285,23 @@ class FlowEngine:
                 try:
                     parts = output.source.split('.')
                     if len(parts) != 2:
-                        raise WorkflowExecutionError(
+                        raise FlowExecutionError(
                             f"Invalid output source format '{output.source}'. Expected 'step.output'"
                         )
                     
                     step_name, output_name = parts
                     if step_name not in self.results:
-                        raise WorkflowExecutionError(f"Output references unknown step '{step_name}'")
+                        raise FlowExecutionError(f"Output references unknown step '{step_name}'")
                     
                     if output_name not in self.results[step_name]:
-                        raise WorkflowExecutionError(
+                        raise FlowExecutionError(
                             f"Output '{output_name}' not found in step '{step_name}' results"
                         )
                     
                     final_outputs[output.name] = self.results[step_name][output_name]
                     
                 except Exception as e:
-                    raise WorkflowExecutionError(f"Failed to resolve output '{output.name}': {e}")
+                    raise FlowExecutionError(f"Failed to resolve output '{output.name}': {e}")
             
             logger.info(f"Flow completed successfully with {len(final_outputs)} outputs")
             
@@ -329,7 +342,7 @@ class FlowEngine:
                 if flow_input.default is not None:
                     inputs[flow_input.name] = flow_input.default
                 else:
-                    raise WorkflowValidationError(
+                    raise FlowValidationError(
                         f"Required input '{flow_input.name}' is missing"
                     )
 
@@ -377,9 +390,22 @@ def _parse_flow_data(data: Dict[str, Any], source_path: Path) -> FlowSpec:
         # Parse steps
         steps = {}
         for step_name, step_data in data.get('steps', {}).items():
+            prompt_name = step_data.get('prompt')
+            tool_name = step_data.get('tool')
+
+            if not prompt_name and not tool_name:
+                raise FlowValidationError(
+                    f"Step '{step_name}' must have either a 'prompt' or a 'tool' key"
+                )
+            if prompt_name and tool_name:
+                raise FlowValidationError(
+                    f"Step '{step_name}' cannot have both 'prompt' and 'tool' keys"
+                )
+
             steps[step_name] = FlowStep(
                 name=step_name,
-                prompt_name=step_data['prompt'],
+                prompt_name=prompt_name,
+                tool_name=tool_name,
                 inputs=step_data.get('inputs', {}),
                 outputs=step_data.get('outputs', []),
                 depends_on=step_data.get('depends_on', []),
