@@ -8,7 +8,7 @@ from string import Template
 from .config import Config, Provider
 from .registry import ToolRegistry, RegisteredTool
 from .client import call_api
-from .orac import Orac
+from .orac import Orac, _inject_response_format
 from .flow import FlowEngine, load_flow
 from .skills import SkillEngine, load_skill
 from .logger import logger
@@ -46,21 +46,24 @@ class AgentEngine:
             **kwargs
         )
         
-        # Add an initial user message to start the conversation
-        self.message_history.append({'role': 'user', 'text': f"Please help me with: {kwargs.get('goal', 'the given task')}"})
+        # Add an initial user message to start the conversation with the provided parameters
+        input_summary = ", ".join([f"{k}={v}" for k, v in kwargs.items()])
+        self.message_history.append({'role': 'user', 'text': f"Please help me with the following inputs: {input_summary}"})
         
         for i in range(self.spec.max_iterations):
             print(f"\n--- Iteration {i+1}/{self.spec.max_iterations} ---")
 
             # 2. Query the LLM for the next action
             try:
+                # Convert response_mime_type to response_format for OpenAI compatibility
+                processed_config = _inject_response_format(self.spec.generation_config)
                 response_str = call_api(
                     provider=self.provider,
                     api_key=self.api_key,
                     message_history=self.message_history,
                     system_prompt=system_prompt,
                     model_name=self.spec.model_name,
-                    generation_config=self.spec.generation_config
+                    generation_config=processed_config
                 )
                 action_data = json.loads(response_str)
             except Exception as e:

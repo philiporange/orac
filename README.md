@@ -105,6 +105,17 @@ orac chat show work                     # Show conversation history
 orac chat delete work                   # Delete conversation
 ```
 
+#### **Agents** - Autonomous agents for complex tasks
+```bash
+# Execute an agent
+orac agent run research_agent --topic "quantum computing"
+orac agent run geo_cuisine_agent --country "Japan"
+
+# Discover and explore agents
+orac agent list                         # List all agents
+orac agent show research_agent          # Show agent details
+```
+
 #### **Configuration** - System management
 ```bash
 # Configuration
@@ -299,6 +310,35 @@ orac --help                           # Show all available commands
 # Search by keyword
 orac search "translate"               # Find translation-related prompts/flows
 ```
+
+### 6. Autonomous Agents
+
+Create agents that can reason and use tools to accomplish complex goals.
+
+**File:** `orac/agents/geo_cuisine_agent.yaml`
+```yaml
+name: geo_cuisine_agent
+description: An agent that finds the capital of a country and a traditional recipe.
+inputs:
+  - name: country
+    type: string
+    required: true
+tools:
+  - "prompt:capital"
+  - "prompt:recipe"
+  - "tool:finish"
+system_prompt: |
+  You are Geo-Cuisine Agent... (and so on)
+```
+
+Then, run the agent from the command line:
+
+```bash
+orac agent run geo_cuisine_agent --country "Thailand"
+```
+
+The agent will show its thought process and tool usage, ultimately producing a result like:
+*The capital of Thailand is Bangkok. A traditional recipe you can try is Pad Thai...*
 
 ---
 

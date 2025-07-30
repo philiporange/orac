@@ -39,13 +39,16 @@ class ToolRegistry:
         for yaml_file in directory.glob("*.yaml"):
             with open(yaml_file, "r") as f:
                 spec = yaml.safe_load(f)
-                if not spec or 'name' not in spec:
+                if not spec:
                     continue
                 
-                # The agent identifies tools by `type:name` (e.g., `prompt:bash`)
-                tool_key = f"{tool_type}:{spec['name']}"
+                # Use the filename (stem) as the name if not specified in the YAML
+                name = spec.get('name', yaml_file.stem)
+                
+                # The agent identifies tools by `type:name` (e.g., `prompt:capital`)
+                tool_key = f"{tool_type}:{name}"
                 self.tools[tool_key] = RegisteredTool(
-                    name=spec['name'],
+                    name=name,
                     type=tool_type,
                     description=spec.get("description", "No description provided."),
                     inputs=spec.get("parameters", spec.get("inputs", [])),
