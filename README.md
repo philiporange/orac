@@ -1,6 +1,6 @@
 # Orac
 
-![Orac Logo](assets/orac_logo.png)
+![Orac Logo](assets/logo.png)
 
 **Orac** is a lightweight, YAML-driven framework for working with OpenAI-compatible LLM APIs. It provides clean abstractions, intuitive command-line interface, structured parameter handling, and support for both local and remote file attachments.
 
