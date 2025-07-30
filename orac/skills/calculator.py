@@ -1,7 +1,7 @@
 """
-Calculator tool for mathematical expression evaluation.
+Calculator skill for mathematical expression evaluation.
 
-This tool safely evaluates mathematical expressions and returns
+This skill safely evaluates mathematical expressions and returns
 both the result and a representation of the expression tree.
 """
 
@@ -11,7 +11,7 @@ import sympy as sp
 
 def execute(inputs: Dict[str, Any]) -> Union[str, Dict[str, Any]]:
     """
-    Execute the calculator tool.
+    Execute the calculator skill.
 
     Args:
         inputs: Dictionary containing:

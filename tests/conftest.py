@@ -68,6 +68,48 @@ response_mime_type: "application/json"
     return prompts_dir
 
 
+@pytest.fixture
+def test_skills_dir(temp_dir):
+    """Create test skills directory with sample skills."""
+    skills_dir = temp_dir / "skills"
+    skills_dir.mkdir()
+
+    # Create test calculator skill YAML
+    (skills_dir / "calculator.yaml").write_text("""
+name: calculator
+description: "Simple calculator skill"
+version: "1.0.0"
+inputs:
+  - name: expression
+    type: string
+    description: "Mathematical expression to evaluate"
+    required: true
+outputs:
+  - name: result
+    type: string
+    description: "Calculation result"
+metadata:
+  author: "Test"
+security:
+  timeout: 10
+""")
+
+    # Create test calculator skill Python script
+    (skills_dir / "calculator.py").write_text("""
+def execute(inputs):
+    \"\"\"Execute calculator skill.\"\"\"
+    expression = inputs.get('expression', '')
+    try:
+        # Simple evaluation for test purposes
+        result = str(eval(expression))
+        return {"result": result}
+    except Exception as e:
+        return {"result": f"Error: {str(e)}"}
+""")
+
+    return skills_dir
+
+
 
 
 @pytest.fixture(autouse=True)

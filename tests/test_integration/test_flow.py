@@ -174,16 +174,16 @@ steps:
 
     @pytest.mark.integration
     @patch('orac.orac.call_api')
-    def test_flow_with_tool_step(self, mock_call_api, temp_dir, test_prompts_dir, test_tools_dir):
-        """Test a flow that includes a tool step."""
+    def test_flow_with_skill_step(self, mock_call_api, temp_dir, test_prompts_dir, test_skills_dir):
+        """Test a flow that includes a skill step."""
         mock_call_api.return_value = "Analyzed: 8.0"
 
         flows_dir = temp_dir / "flows"
         flows_dir.mkdir()
 
-        (flows_dir / "tool_flow.yaml").write_text("""
-name: "Tool Flow Test"
-description: "A flow that uses a tool"
+        (flows_dir / "skill_flow.yaml").write_text("""
+name: "Skill Flow Test"
+description: "A flow that uses a skill"
 
 inputs:
   - name: expression
@@ -196,7 +196,7 @@ outputs:
 
 steps:
   calculate_step:
-    tool: calculator
+    skill: calculator
     inputs:
       expression: ${inputs.expression}
 
@@ -209,8 +209,8 @@ steps:
       - result
 """)
 
-        flow = load_flow(str(flows_dir / "tool_flow.yaml"))
-        engine = FlowEngine(flow, prompts_dir=str(test_prompts_dir), tools_dir=str(test_tools_dir))
+        flow = load_flow(str(flows_dir / "skill_flow.yaml"))
+        engine = FlowEngine(flow, prompts_dir=str(test_prompts_dir), skills_dir=str(test_skills_dir))
 
         results = engine.execute(inputs={"expression": "4 * 2"})
 

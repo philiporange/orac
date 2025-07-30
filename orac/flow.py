@@ -17,7 +17,7 @@ import networkx as nx
 
 from .logger import logger
 from .orac import Orac
-from .tools import ToolEngine, load_tool
+from .skills import SkillEngine, load_skill
 from .progress import ProgressCallback, ProgressEvent, ProgressType
 
 
@@ -44,7 +44,7 @@ class FlowStep:
     """Represents a single step in a flow."""
     name: str
     prompt_name: Optional[str] = None
-    tool_name: Optional[str] = None
+    skill_name: Optional[str] = None
     inputs: Dict[str, str] = field(default_factory=dict)
     outputs: List[str] = field(default_factory=list)
     depends_on: List[str] = field(default_factory=list)
@@ -75,11 +75,11 @@ class FlowEngine:
     """Executes flows by managing step dependencies and data flow."""
 
     def __init__(self, flow_spec: FlowSpec, prompts_dir: str = "prompts", 
-                 tools_dir: str = "tools",
+                 skills_dir: str = "skills",
                  progress_callback: Optional[ProgressCallback] = None):
         self.spec = flow_spec
         self.prompts_dir = prompts_dir
-        self.tools_dir = tools_dir
+        self.skills_dir = skills_dir
         self.progress_callback = progress_callback
         self.results: Dict[str, Dict[str, Any]] = {}
         self.graph = self._build_dependency_graph()
@@ -184,7 +184,7 @@ class FlowEngine:
                 current_step=step_index + 1,
                 total_steps=total_steps,
                 step_name=step_name,
-                metadata={"step_name": step_name, "prompt_name": step.prompt_name, "tool_name": step.tool_name}
+                metadata={"step_name": step_name, "prompt_name": step.prompt_name, "skill_name": step.skill_name}
             ))
         
         # Resolve input templates
@@ -194,7 +194,7 @@ class FlowEngine:
         
         logger.debug(f"Step '{step_name}' resolved inputs: {resolved_inputs}")
         
-        # Execute the prompt or tool
+        # Execute the prompt or skill
         try:
             if step.prompt_name:
                 # Execute a prompt step
@@ -211,14 +211,14 @@ class FlowEngine:
                         step_results = {step.outputs[0]: result}
                     else:
                         step_results = {'result': result}
-            elif step.tool_name:
-                # Execute a tool step
-                tool_path = Path(self.tools_dir) / f"{step.tool_name}.yaml"
-                tool_spec = load_tool(tool_path)
-                tool_engine = ToolEngine(tool_spec, tools_dir=self.tools_dir, progress_callback=self.progress_callback)
-                step_results = tool_engine.execute(resolved_inputs)
+            elif step.skill_name:
+                # Execute a skill step
+                skill_path = Path(self.skills_dir) / f"{step.skill_name}.yaml"
+                skill_spec = load_skill(skill_path)
+                skill_engine = SkillEngine(skill_spec, skills_dir=self.skills_dir, progress_callback=self.progress_callback)
+                step_results = skill_engine.execute(resolved_inputs)
             else:
-                raise FlowExecutionError(f"Step '{step_name}' has no prompt or tool defined.")
+                raise FlowExecutionError(f"Step '{step_name}' has no prompt or skill defined.")
 
             logger.debug(f"Step '{step_name}' results: {step_results}")
             
@@ -391,21 +391,21 @@ def _parse_flow_data(data: Dict[str, Any], source_path: Path) -> FlowSpec:
         steps = {}
         for step_name, step_data in data.get('steps', {}).items():
             prompt_name = step_data.get('prompt')
-            tool_name = step_data.get('tool')
+            skill_name = step_data.get('skill')
 
-            if not prompt_name and not tool_name:
+            if not prompt_name and not skill_name:
                 raise FlowValidationError(
-                    f"Step '{step_name}' must have either a 'prompt' or a 'tool' key"
+                    f"Step '{step_name}' must have either a 'prompt' or a 'skill' key"
                 )
-            if prompt_name and tool_name:
+            if prompt_name and skill_name:
                 raise FlowValidationError(
-                    f"Step '{step_name}' cannot have both 'prompt' and 'tool' keys"
+                    f"Step '{step_name}' cannot have both 'prompt' and 'skill' keys"
                 )
 
             steps[step_name] = FlowStep(
                 name=step_name,
                 prompt_name=prompt_name,
-                tool_name=tool_name,
+                skill_name=skill_name,
                 inputs=step_data.get('inputs', {}),
                 outputs=step_data.get('outputs', []),
                 depends_on=step_data.get('depends_on', []),

@@ -15,7 +15,7 @@ from orac.config import Config
 from orac.orac import Orac
 from orac.chat import start_chat_interface
 from orac.flow import load_flow, FlowEngine, list_flows, FlowValidationError, FlowExecutionError
-from orac.tools import load_tool, ToolEngine, list_tools, ToolValidationError, ToolExecutionError
+from orac.skills import load_skill, SkillEngine, list_skills, SkillValidationError, SkillExecutionError
 from orac.cli_progress import create_cli_reporter
 
 
@@ -461,7 +461,7 @@ def main():
     # Add resource parsers
     add_prompt_parser(subparsers)
     add_flow_parser(subparsers)
-    add_tool_parser(subparsers)
+    add_skill_parser(subparsers)
     add_chat_parser(subparsers)
     add_config_parser(subparsers)
     add_auth_parser(subparsers)
@@ -478,8 +478,8 @@ def main():
         handle_prompt_commands(args)
     elif args.resource == 'flow':
         handle_flow_commands(args)
-    elif args.resource == 'tool':
-        handle_tool_commands(args)
+    elif args.resource == 'skill':
+        handle_skill_commands(args)
     elif args.resource == 'chat':
         handle_chat_commands(args)
     elif args.resource == 'config':  
@@ -572,41 +572,41 @@ def add_flow_parser(subparsers):
     return flow_parser
 
 
-def add_tool_parser(subparsers):
-    """Add tool resource parser."""
-    tool_parser = subparsers.add_parser(
-        'tool',
-        help='Python script tools',
-        description='Execute and manage Python tools'
+def add_skill_parser(subparsers):
+    """Add skill resource parser."""
+    skill_parser = subparsers.add_parser(
+        'skill',
+        help='Runnable skills',
+        description='Execute and manage skills'
     )
 
     # Add common arguments
-    add_common_tool_args(tool_parser)
+    add_common_skill_args(skill_parser)
 
     # Create action subparsers
-    tool_subparsers = tool_parser.add_subparsers(
+    skill_subparsers = skill_parser.add_subparsers(
         dest='action',
         help='Available actions',
         metavar='<action>'
     )
 
     # run action
-    run_parser = tool_subparsers.add_parser('run', help='Execute a tool')
-    run_parser.add_argument('name', help='Name of the tool to run')
-    add_tool_execution_args(run_parser)
+    run_parser = skill_subparsers.add_parser('run', help='Execute a skill')
+    run_parser.add_argument('name', help='Name of the skill to run')
+    add_skill_execution_args(run_parser)
 
     # list action
-    list_parser = tool_subparsers.add_parser('list', help='List all available tools')
+    list_parser = skill_subparsers.add_parser('list', help='List all available skills')
 
     # show action
-    show_parser = tool_subparsers.add_parser('show', help='Show tool details')
-    show_parser.add_argument('name', help='Name of the tool to show')
+    show_parser = skill_subparsers.add_parser('show', help='Show skill details')
+    show_parser.add_argument('name', help='Name of the skill to show')
 
     # validate action
-    validate_parser = tool_subparsers.add_parser('validate', help='Validate tool definition')
-    validate_parser.add_argument('name', help='Name of the tool to validate')
+    validate_parser = skill_subparsers.add_parser('validate', help='Validate skill definition')
+    validate_parser.add_argument('name', help='Name of the skill to validate')
 
-    return tool_parser
+    return skill_parser
 
 
 
@@ -742,12 +742,12 @@ def add_common_flow_args(parser):
         help='Directory where prompt YAML files live'
     )
 
-def add_common_tool_args(parser):
-    """Add common arguments for tool commands."""
+def add_common_skill_args(parser):
+    """Add common arguments for skill commands."""
     parser.add_argument(
-        '--tools-dir',
-        default=Config.DEFAULT_TOOLS_DIR,
-        help='Directory where tool YAML files live'
+        '--skills-dir',
+        default=Config.DEFAULT_SKILLS_DIR,
+        help='Directory where skill YAML files live'
     )
 
 
@@ -805,8 +805,8 @@ def add_flow_execution_args(parser):
     parser.add_argument('--json-output', action='store_true', help='Format final output as JSON')
 
 
-def add_tool_execution_args(parser):
-    """Add execution-specific arguments for tools."""
+def add_skill_execution_args(parser):
+    """Add execution-specific arguments for skills."""
     parser.add_argument('--output', '-o', help='Write output to file')
     parser.add_argument('--json-output', action='store_true', help='Format final output as JSON')
 
@@ -856,7 +856,7 @@ def handle_shortcuts_and_parse(parser):
         elif first_arg == 'flow' and len(argv) > 1 and argv[1] not in ['run', 'list', 'show', 'graph', 'test']:
             argv = ['flow', 'run'] + argv[1:]
         # Legacy single-prompt mode (no resource specified)
-        elif first_arg not in ['prompt', 'flow', 'chat', 'config', 'auth', 'list', 'search'] and not first_arg.startswith('-'):
+        elif first_arg not in ['prompt', 'flow', 'skill', 'chat', 'config', 'auth', 'list', 'search'] and not first_arg.startswith('-'):
             # Assume it's a prompt name - convert to new format
             argv = ['prompt', 'run'] + argv
     
@@ -901,18 +901,18 @@ def handle_flow_commands(args):
         sys.exit(1)
 
 
-def handle_tool_commands(args):
-    """Handle tool resource commands."""
+def handle_skill_commands(args):
+    """Handle skill resource commands."""
     if args.action == 'run':
-        execute_tool(args)
+        execute_skill(args)
     elif args.action == 'list':
-        list_tools_command(args.tools_dir)
+        list_skills_command(args.skills_dir)
     elif args.action == 'show':
-        show_tool_info(args.tools_dir, args.name)
+        show_skill_info(args.skills_dir, args.name)
     elif args.action == 'validate':
-        validate_tool_command(args.tools_dir, args.name)
+        validate_skill_command(args.skills_dir, args.name)
     else:
-        print(f"Unknown tool action: {args.action}", file=sys.stderr)
+        print(f"Unknown skill action: {args.action}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -1549,91 +1549,91 @@ def search_command(keyword: str):
     if not found_any:
         print(f"No prompts or flows found matching '{keyword}'")
 
-def execute_tool(args):
-    """Execute a tool with dynamic parameter loading."""
-    tool_path = Path(args.tools_dir) / f"{args.name}.yaml"
+def execute_skill(args):
+    """Execute a skill with dynamic parameter loading."""
+    skill_path = Path(args.skills_dir) / f"{args.name}.yaml"
     try:
-        spec = load_tool(tool_path)
-        # Create a new parser for this specific tool with its parameters
-        tool_parser = argparse.ArgumentParser(add_help=False)
-        add_tool_execution_args(tool_parser)
-        # Add tool inputs as parameters
-        for tool_input in spec.inputs:
-            add_parameter_argument(tool_parser, tool_input.__dict__)
+        spec = load_skill(skill_path)
+        # Create a new parser for this specific skill with its parameters
+        skill_parser = argparse.ArgumentParser(add_help=False)
+        add_skill_execution_args(skill_parser)
+        # Add skill inputs as parameters
+        for skill_input in spec.inputs:
+            add_parameter_argument(skill_parser, skill_input.__dict__)
         # Parse remaining args
-        remaining_args = sys.argv[4:]  # Skip 'orac tool run toolname'
-        tool_args = tool_parser.parse_args(remaining_args)
+        remaining_args = sys.argv[4:]  # Skip 'orac skill run skillname'
+        skill_args = skill_parser.parse_args(remaining_args)
         # Create progress reporter if not quiet
         progress_callback = None
         if not args.quiet:
             reporter = create_cli_reporter(verbose=args.verbose, quiet=args.quiet)
             progress_callback = reporter.report
-        engine = ToolEngine(spec, tools_dir=args.tools_dir, progress_callback=progress_callback)
+        engine = SkillEngine(spec, skills_dir=args.skills_dir, progress_callback=progress_callback)
         # Collect input values from CLI args
         inputs = {}
-        for tool_input in spec.inputs:
-            cli_value = getattr(tool_args, tool_input.name, None)
+        for skill_input in spec.inputs:
+            cli_value = getattr(skill_args, skill_input.name, None)
             if cli_value is not None:
                 # Convert CLI string to appropriate type
-                converted_value = convert_cli_value(cli_value, tool_input.type, tool_input.name)
-                inputs[tool_input.name] = converted_value
-            elif tool_input.default is not None:
-                inputs[tool_input.name] = tool_input.default
-        logger.debug(f"Tool inputs: {inputs}")
-        # Execute tool
+                converted_value = convert_cli_value(cli_value, skill_input.type, skill_input.name)
+                inputs[skill_input.name] = converted_value
+            elif skill_input.default is not None:
+                inputs[skill_input.name] = skill_input.default
+        logger.debug(f"Skill inputs: {inputs}")
+        # Execute skill
         results = engine.execute(inputs)
         # Output results
         if args.output:
             try:
                 with open(args.output, "w", encoding="utf-8") as f:
-                    if getattr(tool_args, 'json_output', False):
+                    if getattr(skill_args, 'json_output', False):
                         json.dump(results, f, indent=2)
                     else:
                         print(results, file=f)
-                logger.info(f"Tool output written to file: {args.output}")
+                logger.info(f"Skill output written to file: {args.output}")
             except IOError as e:
                 logger.error(f"Error writing to output file '{args.output}': {e}")
                 print(f"Error writing to output file '{args.output}': {e}", file=sys.stderr)
                 sys.exit(1)
         else:
-            if getattr(tool_args, 'json_output', False):
+            if getattr(skill_args, 'json_output', False):
                 print(json.dumps(results, indent=2))
             else:
                 print(results)
-        logger.info("Tool completed successfully")
-    except (ToolValidationError, ToolExecutionError) as e:
-        logger.error(f"Tool error: {e}")
+        logger.info("Skill completed successfully")
+    except (SkillValidationError, SkillExecutionError) as e:
+        logger.error(f"Skill error: {e}")
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
-        logger.error(f"Unexpected error running tool: {e}")
+        logger.error(f"Unexpected error running skill: {e}")
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
-def list_tools_command(tools_dir: str):
-    """List available tools."""
-    tools = list_tools(tools_dir)
-    if not tools:
-        print(f"No tools found in {tools_dir}")
+def list_skills_command(skills_dir: str):
+    """List available skills."""
+    skills = list_skills(skills_dir)
+    if not skills:
+        print(f"No skills found in {skills_dir}")
         return
-    print(f"\nAvailable tools ({len(tools)} total):")
+    print(f"\nAvailable skills ({len(skills)} total):")
     print("-" * 80)
     print(f"{'Name':20} {'Description':60}")
     print("-" * 80)
-    for tool in tools:
-        name = tool['name']
-        desc = tool['description'][:57] + "..." if len(tool['description']) > 60 else tool['description']
+    for skill in skills:
+        name = skill['name']
+        desc = skill['description'][:57] + "..." if len(skill['description']) > 60 else skill['description']
         print(f"{name:20} {desc:60}")
 
-def show_tool_info(tools_dir: str, tool_name: str):
-    """Show detailed information about a tool."""
-    tool_path = Path(tools_dir) / f"{tool_name}.yaml"
+def show_skill_info(skills_dir: str, skill_name: str):
+    """Show detailed information about a skill."""
+    skill_path = Path(skills_dir) / f"{skill_name}.yaml"
     try:
-        spec = load_tool(tool_path)
-    except ToolValidationError as e:
-        print(f"Error loading tool: {e}", file=sys.stderr)
+        spec = load_skill(skill_path)
+    except SkillValidationError as e:
+        print(f"Error loading skill: {e}", file=sys.stderr)
         sys.exit(1)
-    banner = f"Tool: {spec.name}"
+    banner = f"Skill: {spec.name}"
     print(f"\n{banner}\n{'=' * len(banner)}")
     if spec.description:
         print(f"Description: {spec.description}\n")
@@ -1657,19 +1657,19 @@ def show_tool_info(tools_dir: str, tool_name: str):
                 print(f"    {out.description}")
             print()
     # Example usage
-    example = [f"orac tool run {tool_name}"]
+    example = [f"orac skill run {skill_name}"]
     for inp in spec.inputs:
         if inp.required and inp.default is None:
             flag = f"--{inp.name.replace('_', '-')}"
             example.extend([flag, "'value'"])
     print("Example usage:\n ", " ".join(example))
 
-def validate_tool_command(tools_dir: str, tool_name: str):
-    """Validate tool YAML."""
+def validate_skill_command(skills_dir: str, skill_name: str):
+    """Validate skill YAML."""
     try:
-        tool_path = Path(tools_dir) / f"{tool_name}.yaml"
-        spec = load_tool(tool_path)
-        print(f"✓ Tool '{tool_name}' is valid")
+        skill_path = Path(skills_dir) / f"{skill_name}.yaml"
+        spec = load_skill(skill_path)
+        print(f"✓ Skill '{skill_name}' is valid")
         # Check for required fields
         if 'name' not in spec.__dict__:
             print("⚠ Warning: No 'name' field found")
@@ -1679,9 +1679,9 @@ def validate_tool_command(tools_dir: str, tool_name: str):
             print("⚠ Warning: No 'inputs' field found")
         if 'outputs' not in spec.__dict__:
             print("⚠ Warning: No 'outputs' field found")
-        print(f"Validation complete for '{tool_name}'")
+        print(f"Validation complete for '{skill_name}'")
     except Exception as e:
-        print(f"✗ Validation failed for '{tool_name}': {e}")
+        print(f"✗ Validation failed for '{skill_name}': {e}")
         sys.exit(1)
 
 

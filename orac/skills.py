@@ -1,10 +1,10 @@
 """
-Tools execution engine for Orac.
+Skills execution engine for Orac.
 
 This module provides functionality to:
-- Load and validate tool specifications from YAML
-- Execute Python tool scripts with proper sandboxing
-- Manage tool inputs/outputs according to specifications
+- Load and validate skill specifications from YAML
+- Execute Python skill scripts with proper sandboxing
+- Manage skill inputs/outputs according to specifications
 - Integrate with the broader Orac ecosystem
 """
 
@@ -25,8 +25,8 @@ from .progress import ProgressCallback, ProgressEvent, ProgressType
 
 
 @dataclass
-class ToolInput:
-    """Represents a tool input parameter."""
+class SkillInput:
+    """Represents a skill input parameter."""
     name: str
     type: str = "string"
     description: str = ""
@@ -35,68 +35,68 @@ class ToolInput:
 
 
 @dataclass
-class ToolOutput:
-    """Represents a tool output specification."""
+class SkillOutput:
+    """Represents a skill output specification."""
     name: str
     type: str = "string"
     description: str = ""
 
 
 @dataclass
-class ToolSpec:
-    """Complete tool specification loaded from YAML."""
+class SkillSpec:
+    """Complete skill specification loaded from YAML."""
     name: str
     description: str
     version: str
-    inputs: List[ToolInput]
-    outputs: List[ToolOutput]
+    inputs: List[SkillInput]
+    outputs: List[SkillOutput]
     metadata: Dict[str, Any]
     security: Dict[str, Any]
 
 
-class ToolValidationError(Exception):
-    """Raised when tool validation fails."""
+class SkillValidationError(Exception):
+    """Raised when skill validation fails."""
     pass
 
 
-class ToolExecutionError(Exception):
-    """Raised when tool execution fails."""
+class SkillExecutionError(Exception):
+    """Raised when skill execution fails."""
     pass
 
 
-class ToolEngine:
-    """Executes tools according to their specifications."""
+class SkillEngine:
+    """Executes skills according to their specifications."""
 
-    def __init__(self, tool_spec: ToolSpec, tools_dir: str = None,
+    def __init__(self, skill_spec: SkillSpec, skills_dir: str = None,
                  progress_callback: Optional[ProgressCallback] = None):
-        self.spec = tool_spec
-        self.tools_dir = Path(tools_dir or Config.DEFAULT_TOOLS_DIR)
+        self.spec = skill_spec
+        self.skills_dir = Path(skills_dir or Config.DEFAULT_SKILLS_DIR)
         self.progress_callback = progress_callback
-        self.tool_module = None
+        self.skill_module = None
 
-    def _load_tool_module(self):
-        """Dynamically load the tool's Python module."""
-        tool_path = self.tools_dir / f"{self.spec.name}.py"
+    def _load_skill_module(self):
+        """Dynamically load the skill's Python module."""
+        skill_path = self.skills_dir / f"{self.spec.name}.py"
 
-        if not tool_path.exists():
-            raise ToolValidationError(f"Tool script not found: {tool_path}")
+        if not skill_path.exists():
+            raise SkillValidationError(f"Skill script not found: {skill_path}")
 
         # Load module dynamically
         spec = importlib.util.spec_from_file_location(
-            f"orac.tools.{self.spec.name}",
-            tool_path
+            f"orac.skills.{self.spec.name}",
+            skill_path
         )
         module = importlib.util.module_from_spec(spec)
-        sys.modules[f"orac.tools.{self.spec.name}"] = module
+        sys.modules[f"orac.skills.{self.spec.name}"] = module
         spec.loader.exec_module(module)
 
         # Verify required function exists
         if not hasattr(module, 'execute'):
-            raise ToolValidationError(
-                f"Tool {self.spec.name} must have an 'execute' function"
+            raise SkillValidationError(
+                f"Skill {self.spec.name} must have an 'execute' function"
             )
 
-        self.tool_module = module
+        self.skill_module = module
 
     def _validate_inputs(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Validate and convert inputs according to specification."""
@@ -108,7 +108,7 @@ class ToolEngine:
 
             if value is None:
                 if input_spec.required and input_spec.default is None:
-                    raise ToolValidationError(
+                    raise SkillValidationError(
                         f"Required input '{name}' is missing"
                     )
                 value = input_spec.default
@@ -141,28 +141,28 @@ class ToolEngine:
             else:
                 return type_map[type_name](value)
         except (ValueError, TypeError) as e:
-            raise ToolValidationError(
+            raise SkillValidationError(
                 f"Cannot convert input '{param_name}' to {type_name}: {e}"
             )
 
     def execute(self, inputs: Dict[str, Any],
                 sandbox: bool = True) -> Union[str, Dict[str, Any]]:
         """
-        Execute the tool with given inputs.
+        Execute the skill with given inputs.
 
         Args:
-            inputs: Input parameters for the tool
+            inputs: Input parameters for the skill
             sandbox: Whether to execute in a sandboxed environment
 
         Returns:
-            Tool output (string or dictionary)
+            Skill output (string or dictionary)
         """
         # Emit progress start
         if self.progress_callback:
             self.progress_callback(ProgressEvent(
-                type=ProgressType.TOOL_START,
-                message=f"Starting tool: {self.spec.name}",
-                metadata={"tool_name": self.spec.name, "inputs": inputs}
+                type=ProgressType.SKILL_START,
+                message=f"Starting skill: {self.spec.name}",
+                metadata={"skill_name": self.spec.name, "inputs": inputs}
             ))
 
         try:
@@ -174,8 +174,8 @@ class ToolEngine:
                 result = self._execute_sandboxed(validated_inputs)
             else:
                 # Execute directly
-                self._load_tool_module()
-                result = self.tool_module.execute(validated_inputs)
+                self._load_skill_module()
+                result = self.skill_module.execute(validated_inputs)
 
             # Validate outputs match specification
             self._validate_outputs(result)
@@ -183,9 +183,9 @@ class ToolEngine:
             # Emit progress complete
             if self.progress_callback:
                 self.progress_callback(ProgressEvent(
-                    type=ProgressType.TOOL_COMPLETE,
-                    message=f"Completed tool: {self.spec.name}",
-                    metadata={"tool_name": self.spec.name, "result_type": type(result).__name__}
+                    type=ProgressType.SKILL_COMPLETE,
+                    message=f"Completed skill: {self.spec.name}",
+                    metadata={"skill_name": self.spec.name, "result_type": type(result).__name__}
                 ))
 
             return result
@@ -194,22 +194,22 @@ class ToolEngine:
             # Emit error event
             if self.progress_callback:
                 self.progress_callback(ProgressEvent(
-                    type=ProgressType.TOOL_ERROR,
-                    message=f"Tool '{self.spec.name}' failed: {str(e)}",
-                    metadata={"tool_name": self.spec.name, "error_type": type(e).__name__}
+                    type=ProgressType.SKILL_ERROR,
+                    message=f"Skill '{self.spec.name}' failed: {str(e)}",
+                    metadata={"skill_name": self.spec.name, "error_type": type(e).__name__}
                 ))
-            raise ToolExecutionError(f"Tool execution failed: {e}")
+            raise SkillExecutionError(f"Skill execution failed: {e}")
 
     def _execute_sandboxed(self, inputs: Dict[str, Any]) -> Any:
-        """Execute tool in a subprocess with resource limits."""
-        # Create a temporary script that executes the tool
+        """Execute skill in a subprocess with resource limits."""
+        # Create a temporary script that executes the skill
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
             f.write(f"""
 import sys
 import json
-sys.path.insert(0, '{self.tools_dir.parent}')
+sys.path.insert(0, '{self.skills_dir.parent}')
 
-from tools.{self.spec.name} import execute
+from skills.{self.spec.name} import execute
 
 inputs = json.loads('{json.dumps(inputs)}')
 result = execute(inputs)
@@ -241,40 +241,40 @@ print(json.dumps(result))
             return
 
         if not isinstance(result, dict):
-            raise ToolValidationError(
-                f"Tool must return string or dict, got {type(result)}"
+            raise SkillValidationError(
+                f"Skill must return string or dict, got {type(result)}"
             )
 
         # Check all specified outputs are present
         for output in self.spec.outputs:
             if output.name not in result:
-                raise ToolValidationError(
+                raise SkillValidationError(
                     f"Missing required output: {output.name}"
                 )
 
 
-def load_tool(tool_path: Union[str, Path]) -> ToolSpec:
-    """Load and validate tool YAML file."""
-    tool_path = Path(tool_path)
+def load_skill(skill_path: Union[str, Path]) -> SkillSpec:
+    """Load and validate skill YAML file."""
+    skill_path = Path(skill_path)
 
-    if not tool_path.exists():
-        raise ToolValidationError(f"Tool file not found: {tool_path}")
+    if not skill_path.exists():
+        raise SkillValidationError(f"Skill file not found: {skill_path}")
 
     try:
-        with open(tool_path, 'r', encoding='utf-8') as f:
+        with open(skill_path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
     except yaml.YAMLError as e:
-        raise ToolValidationError(f"Invalid YAML in tool file: {e}")
+        raise SkillValidationError(f"Invalid YAML in skill file: {e}")
 
-    return _parse_tool_data(data)
+    return _parse_skill_data(data)
 
 
-def _parse_tool_data(data: Dict[str, Any]) -> ToolSpec:
-    """Parse tool data dictionary into ToolSpec."""
+def _parse_skill_data(data: Dict[str, Any]) -> SkillSpec:
+    """Parse skill data dictionary into SkillSpec."""
     # Parse inputs
     inputs = []
     for input_data in data.get('inputs', []):
-        inputs.append(ToolInput(
+        inputs.append(SkillInput(
             name=input_data['name'],
             type=input_data.get('type', 'string'),
             description=input_data.get('description', ''),
@@ -285,13 +285,13 @@ def _parse_tool_data(data: Dict[str, Any]) -> ToolSpec:
     # Parse outputs
     outputs = []
     for output_data in data.get('outputs', []):
-        outputs.append(ToolOutput(
+        outputs.append(SkillOutput(
             name=output_data['name'],
             type=output_data.get('type', 'string'),
             description=output_data.get('description', '')
         ))
 
-    return ToolSpec(
+    return SkillSpec(
         name=data['name'],
         description=data.get('description', ''),
         version=data.get('version', '1.0.0'),
@@ -302,29 +302,29 @@ def _parse_tool_data(data: Dict[str, Any]) -> ToolSpec:
     )
 
 
-def list_tools(tools_dir: Union[str, Path]) -> List[Dict[str, str]]:
-    """List available tools in the tools directory."""
-    tools_dir = Path(tools_dir)
-    tools = []
+def list_skills(skills_dir: Union[str, Path]) -> List[Dict[str, str]]:
+    """List available skills in the skills directory."""
+    skills_dir = Path(skills_dir)
+    skills = []
 
-    if not tools_dir.exists():
-        return tools
+    if not skills_dir.exists():
+        return skills
 
-    for yaml_file in tools_dir.glob("*.yaml"):
+    for yaml_file in skills_dir.glob("*.yaml"):
         # Skip if no corresponding .py file
         py_file = yaml_file.with_suffix('.py')
         if not py_file.exists():
             continue
 
         try:
-            spec = load_tool(yaml_file)
-            tools.append({
+            spec = load_skill(yaml_file)
+            skills.append({
                 'name': spec.name,
                 'description': spec.description,
                 'version': spec.version,
                 'path': str(yaml_file)
             })
         except Exception as e:
-            logger.warning(f"Failed to load tool {yaml_file}: {e}")
+            logger.warning(f"Failed to load skill {yaml_file}: {e}")
 
-    return tools
+    return skills

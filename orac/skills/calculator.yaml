@@ -33,5 +33,5 @@ metadata:
 security:
   timeout: 10  # Maximum execution time in seconds
   memory_limit: "100MB"  # Maximum memory usage
-  allow_network: false  # Whether tool can make network requests
-  allow_filesystem: false  # Whether tool can access filesystem
+  allow_network: false  # Whether skill can make network requests
+  allow_filesystem: false  # Whether skill can access filesystem
