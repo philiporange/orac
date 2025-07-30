@@ -207,12 +207,16 @@ class SkillEngine:
             f.write(f"""
 import sys
 import json
-sys.path.insert(0, '{self.skills_dir.parent}')
+import importlib.util
 
-from skills.{self.spec.name} import execute
+# Load the skill module directly by file path
+skill_path = '{self.skills_dir / f"{self.spec.name}.py"}'
+spec = importlib.util.spec_from_file_location('skill_module', skill_path)
+skill_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(skill_module)
 
 inputs = json.loads('{json.dumps(inputs)}')
-result = execute(inputs)
+result = skill_module.execute(inputs)
 print(json.dumps(result))
 """)
             script_path = f.name

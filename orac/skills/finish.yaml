@@ -1,0 +1,11 @@
+name: finish
+description: "Use this tool to provide the final answer and complete the task."
+inputs:
+  - name: result
+    type: string
+    description: "The final, complete answer to the user's goal."
+    required: true
+outputs:
+  - name: result
+    type: string
+    description: "The final answer provided by the agent."

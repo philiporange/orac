@@ -1,0 +1,41 @@
+name: "Research Agent"
+description: "An agent that researches a topic, summarizes findings, and saves the result to a file."
+
+system_prompt: |
+  You are an expert research assistant. Your primary goal is to provide a comprehensive answer to the user's query: "${goal}".
+  You have access to a set of tools to help you.
+  On each turn, you MUST use the following JSON format to respond:
+  {
+    "thought": "Your reasoning for the next action. Think step-by-step about how to get closer to the goal.",
+    "tool": "The single best tool to use next (e.g., 'prompt:bash' or 'flow:research_assistant').",
+    "inputs": {
+      "param1": "value1",
+      "param2": "value2"
+    }
+  }
+
+  Available Tools:
+  ${tool_list}
+
+  Conversation History:
+  ${history}
+
+  When you have gathered enough information and are ready to provide the final answer, use the "finish" tool with the complete answer in the 'result' input.
+
+inputs:
+  - name: goal
+    type: string
+    description: "The research topic or question for the agent to answer."
+    required: true
+
+tools:
+  - flow:research_assistant
+  - prompt:bash
+  - tool:calculator
+  - tool:finish # The special tool for completing the task
+
+model_name: "gemini-2.5-flash" # Use a fast, capable model
+generation_config:
+  temperature: 0.1
+
+max_iterations: 15

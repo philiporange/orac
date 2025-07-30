@@ -16,6 +16,9 @@ from orac.orac import Orac
 from orac.chat import start_chat_interface
 from orac.flow import load_flow, FlowEngine, list_flows, FlowValidationError, FlowExecutionError
 from orac.skills import load_skill, SkillEngine, list_skills, SkillValidationError, SkillExecutionError
+from orac.agent import AgentEngine, load_agent_spec
+from orac.registry import ToolRegistry
+from orac.config import Provider
 from orac.cli_progress import create_cli_reporter
 
 
@@ -462,6 +465,7 @@ def main():
     add_prompt_parser(subparsers)
     add_flow_parser(subparsers)
     add_skill_parser(subparsers)
+    add_agent_parser(subparsers)
     add_chat_parser(subparsers)
     add_config_parser(subparsers)
     add_auth_parser(subparsers)
@@ -480,6 +484,8 @@ def main():
         handle_flow_commands(args)
     elif args.resource == 'skill':
         handle_skill_commands(args)
+    elif args.resource == 'agent':
+        handle_agent_commands(args)
     elif args.resource == 'chat':
         handle_chat_commands(args)
     elif args.resource == 'config':  
@@ -856,7 +862,7 @@ def handle_shortcuts_and_parse(parser):
         elif first_arg == 'flow' and len(argv) > 1 and argv[1] not in ['run', 'list', 'show', 'graph', 'test']:
             argv = ['flow', 'run'] + argv[1:]
         # Legacy single-prompt mode (no resource specified)
-        elif first_arg not in ['prompt', 'flow', 'skill', 'chat', 'config', 'auth', 'list', 'search'] and not first_arg.startswith('-'):
+        elif first_arg not in ['prompt', 'flow', 'skill', 'agent', 'chat', 'config', 'auth', 'list', 'search'] and not first_arg.startswith('-'):
             # Assume it's a prompt name - convert to new format
             argv = ['prompt', 'run'] + argv
     
@@ -1682,6 +1688,101 @@ def validate_skill_command(skills_dir: str, skill_name: str):
         print(f"Validation complete for '{skill_name}'")
     except Exception as e:
         print(f"✗ Validation failed for '{skill_name}': {e}")
+        sys.exit(1)
+
+
+def add_agent_parser(subparsers):
+    """Add agent resource parser."""
+    agent_parser = subparsers.add_parser(
+        'agent',
+        help='Autonomous agents for complex tasks',
+        description='Execute and manage autonomous agents'
+    )
+    agent_parser.add_argument(
+        '--agents-dir',
+        default=Config.DEFAULT_AGENTS_DIR,
+        help='Directory where agent YAML files live'
+    )
+    
+    agent_subparsers = agent_parser.add_subparsers(
+        dest='action',
+        help='Available actions',
+        metavar='<action>'
+    )
+    
+    run_parser = agent_subparsers.add_parser('run', help='Execute an agent')
+    run_parser.add_argument('name', help='Name of the agent to run')
+    # We will add dynamic args later
+
+
+def handle_agent_commands(args):
+    """Handle agent resource commands."""
+    if args.action == 'run':
+        execute_agent(args)
+    else:
+        print(f"Unknown agent action: {args.action}", file=sys.stderr)
+        sys.exit(1)
+
+
+def execute_agent(args):
+    """Execute an agent with dynamic parameter loading."""
+    agent_path = Path(args.agents_dir) / f"{args.name}.yaml"
+    if not agent_path.exists():
+        print(f"Error: Agent '{args.name}' not found at {agent_path}", file=sys.stderr)
+        sys.exit(1)
+        
+    spec = load_agent_spec(agent_path)
+    
+    # Dynamically add arguments for the agent's inputs
+    agent_parser = argparse.ArgumentParser(add_help=False)
+    for param in spec.inputs:
+        add_parameter_argument(agent_parser, param)
+        
+    # Parse remaining args to get parameter values
+    remaining_args = sys.argv[4:] # Skips 'orac agent run agentname'
+    agent_args, _ = agent_parser.parse_known_args(remaining_args)
+    
+    # Collect input values
+    input_values = {}
+    for param in spec.inputs:
+        name = param["name"]
+        cli_value = getattr(agent_args, name, None)
+        param_type = param.get("type", "string")
+
+        if cli_value is not None:
+            converted_value = convert_cli_value(cli_value, param_type, name)
+            input_values[name] = converted_value
+        elif param.get('required'):
+             print(f"Error: Missing required argument --{name}", file=sys.stderr)
+             sys.exit(1)
+
+    # Setup Provider
+    provider_str = args.provider or os.getenv("ORAC_LLM_PROVIDER")
+    if not provider_str:
+        print("Error: LLM provider not specified. Use --provider or set ORAC_LLM_PROVIDER.", file=sys.stderr)
+        sys.exit(1)
+    provider = Provider(provider_str)
+    api_key = args.api_key # Can be None, will be picked up from env by client
+
+    try:
+        # Initialize components
+        registry = ToolRegistry()
+        engine = AgentEngine(spec, registry, provider, api_key)
+        
+        # Run the agent
+        final_result = engine.run(**input_values)
+        
+        # Handle output
+        if args.output:
+            with open(args.output, "w", encoding="utf-8") as f:
+                f.write(final_result)
+            print(f"\nFinal agent output written to {args.output}")
+        else:
+            print(f"\n--- FINAL AGENT RESULT ---\n{final_result}")
+
+    except Exception as e:
+        logger.error(f"Error running agent: {e}")
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
 

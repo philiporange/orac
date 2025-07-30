@@ -79,6 +79,9 @@ class Config:
     DEFAULT_SKILLS_DIR: Final[Path] = Path(
         os.getenv("ORAC_DEFAULT_SKILLS_DIR", PACKAGE_DIR / "skills")
     )
+    DEFAULT_AGENTS_DIR: Final[Path] = Path(
+        os.getenv("ORAC_DEFAULT_AGENTS_DIR", PACKAGE_DIR / "agents")
+    )
     DEFAULT_CONFIG_FILE: Final[Path] = Path(
         os.getenv("ORAC_DEFAULT_CONFIG_FILE", PACKAGE_DIR / "config.yaml")
     )
