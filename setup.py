@@ -33,5 +33,5 @@ setup(
         "loguru>=0.7.2",
     ],
     extras_require={"dev": ["pytest>=8.2", "ruff>=0.4.0"]},
-    entry_points={"console_scripts": ["orac=orac.cli:main"]},
+    entry_points={"console_scripts": ["orac=orac.cli.main:main"]},
 )

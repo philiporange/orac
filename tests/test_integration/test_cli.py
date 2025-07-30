@@ -14,7 +14,7 @@ import json
 from unittest.mock import patch
 from pathlib import Path
 
-from orac import cli
+from orac.cli import main as cli
 
 
 class TestCLI:
