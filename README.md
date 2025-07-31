@@ -411,7 +411,7 @@ print(chat("Hello! What's 15 + 25?"))      # → "40"
 print(chat("Times 3?"))                     # → "120" (maintains context)
 
 # Using skills programmatically
-from orac.skills import load_skill, Skill
+from orac.skill import load_skill, Skill
 
 skill_spec = load_skill("orac/skills/calculator.yaml")
 engine = Skill(skill_spec)
@@ -665,7 +665,7 @@ orac/
 ├── prompt.py               # Core Prompt class
 ├── progress.py             # Progress tracking infrastructure
 ├── registry.py             # Tool registry for agents
-├── skills.py               # Skills execution engine
+├── skill.py                # Skills execution engine
 ├── agents/                 # Agent YAML definitions
 ├── flows/                  # Flow YAML definitions
 ├── prompts/                # Prompt YAML definitions

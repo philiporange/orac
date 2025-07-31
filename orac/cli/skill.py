@@ -7,7 +7,7 @@ from loguru import logger
 from pathlib import Path
 
 from orac.config import Config
-from orac.skills import load_skill, Skill, list_skills, SkillValidationError, SkillExecutionError
+from orac.skill import load_skill, Skill, list_skills, SkillValidationError, SkillExecutionError
 from orac.cli_progress import create_cli_reporter
 from .utils import add_parameter_argument, convert_cli_value
 

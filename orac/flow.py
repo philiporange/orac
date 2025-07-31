@@ -19,7 +19,7 @@ import networkx as nx
 
 from .logger import logger
 from .prompt import Prompt
-from .skills import Skill, load_skill
+from .skill import Skill, load_skill
 from .progress import ProgressCallback, ProgressEvent, ProgressType
 
 

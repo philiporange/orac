@@ -10,7 +10,7 @@ from .registry import ToolRegistry, RegisteredTool
 from .client import call_api
 from .prompt import Prompt, _inject_response_format
 from .flow import Flow, load_flow
-from .skills import Skill, load_skill
+from .skill import Skill, load_skill
 from .logger import logger
 
 @dataclass
