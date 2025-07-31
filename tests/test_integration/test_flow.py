@@ -13,7 +13,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from orac.flow import FlowEngine, load_flow, list_flows
+from orac.flow import Flow, load_flow, list_flows
 from orac.flow import FlowValidationError, FlowExecutionError
 
 
@@ -123,7 +123,7 @@ steps:
         
         # Load and execute flow
         flow = load_flow(str(flows_dir / "simple_exec.yaml"))
-        engine = FlowEngine(flow, prompts_dir=str(test_prompts_dir))
+        engine = Flow(flow, prompts_dir=str(test_prompts_dir))
         
         results = engine.execute(inputs={"message": "Hello World"})
         
@@ -165,7 +165,7 @@ steps:
 """)
         
         flow = load_flow(str(flows_dir / "error_test.yaml"))
-        engine = FlowEngine(flow, prompts_dir=str(test_prompts_dir))
+        engine = Flow(flow, prompts_dir=str(test_prompts_dir))
         
         with pytest.raises(FlowExecutionError):
             engine.execute(inputs={"input": "test"})
@@ -210,7 +210,7 @@ steps:
 """)
 
         flow = load_flow(str(flows_dir / "skill_flow.yaml"))
-        engine = FlowEngine(flow, prompts_dir=str(test_prompts_dir), skills_dir=str(test_skills_dir))
+        engine = Flow(flow, prompts_dir=str(test_prompts_dir), skills_dir=str(test_skills_dir))
 
         results = engine.execute(inputs={"expression": "4 * 2"})
 
@@ -256,7 +256,7 @@ steps:
 """)
         
         flow = load_flow(str(flows_dir / "output_test.yaml"))
-        engine = FlowEngine(flow, prompts_dir=str(test_prompts_dir))
+        engine = Flow(flow, prompts_dir=str(test_prompts_dir))
         
         results = engine.execute(inputs={"input": "test"})
         

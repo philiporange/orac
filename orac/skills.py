@@ -64,7 +64,7 @@ class SkillExecutionError(Exception):
     pass
 
 
-class SkillEngine:
+class Skill:
     """Executes skills according to their specifications."""
 
     def __init__(self, skill_spec: SkillSpec, skills_dir: str = None,

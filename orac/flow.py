@@ -19,7 +19,7 @@ import networkx as nx
 
 from .logger import logger
 from .prompt import Prompt
-from .skills import SkillEngine, load_skill
+from .skills import Skill, load_skill
 from .progress import ProgressCallback, ProgressEvent, ProgressType
 
 
@@ -73,7 +73,7 @@ class FlowExecutionError(Exception):
     pass
 
 
-class FlowEngine:
+class Flow:
     """Executes flows by managing step dependencies and data flow."""
 
     def __init__(self, flow_spec: FlowSpec, prompts_dir: str = "prompts", 
@@ -217,7 +217,7 @@ class FlowEngine:
                 # Execute a skill step
                 skill_path = Path(self.skills_dir) / f"{step.skill_name}.yaml"
                 skill_spec = load_skill(skill_path)
-                skill_engine = SkillEngine(skill_spec, skills_dir=self.skills_dir, progress_callback=self.progress_callback)
+                skill_engine = Skill(skill_spec, skills_dir=self.skills_dir, progress_callback=self.progress_callback)
                 step_results = skill_engine.execute(resolved_inputs)
             else:
                 raise FlowExecutionError(f"Step '{step_name}' has no prompt or skill defined.")

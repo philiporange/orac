@@ -19,7 +19,7 @@ from orac.progress import (
 )
 from orac.cli_progress import CLIProgressReporter, StreamingProgressReporter, create_cli_reporter
 from orac.prompt import Prompt
-from orac.flow import FlowEngine, FlowSpec, FlowStep, FlowInput, FlowOutput
+from orac.flow import Flow, FlowSpec, FlowStep, FlowInput, FlowOutput
 
 
 class TestProgressEvent:
@@ -325,7 +325,7 @@ class TestCreateSimpleCallback:
 
 
 # Integration tests would go here but require actual Prompt setup
-# These would test the progress callbacks in real Prompt and FlowEngine usage
+# These would test the progress callbacks in real Prompt and Flow usage
 class TestProgressIntegration:
     """Test progress tracking integration with Prompt components."""
     

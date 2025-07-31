@@ -9,8 +9,8 @@ from .config import Config, Provider
 from .registry import ToolRegistry, RegisteredTool
 from .client import call_api
 from .prompt import Prompt, _inject_response_format
-from .flow import FlowEngine, load_flow
-from .skills import SkillEngine, load_skill
+from .flow import Flow, load_flow
+from .skills import Skill, load_skill
 from .logger import logger
 
 @dataclass
@@ -24,7 +24,7 @@ class AgentSpec:
     generation_config: Dict[str, Any] = field(default_factory=dict)
     max_iterations: int = 15
 
-class AgentEngine:
+class Agent:
     def __init__(self, agent_spec: AgentSpec, tool_registry: ToolRegistry, provider: Provider, api_key: Optional[str] = None):
         self.spec = agent_spec
         self.registry = tool_registry
@@ -101,11 +101,11 @@ class AgentEngine:
                         observation = prompt_instance.completion(**tool_inputs)
                     elif tool.type == "flow":
                         flow_spec = load_flow(tool.file_path)
-                        flow_engine = FlowEngine(flow_spec)
+                        flow_engine = Flow(flow_spec)
                         observation = flow_engine.execute(tool_inputs)
                     elif tool.type == "tool":
                         skill_spec = load_skill(tool.file_path)
-                        skill_engine = SkillEngine(skill_spec)
+                        skill_engine = Skill(skill_spec)
                         observation = skill_engine.execute(tool_inputs)
                     else:
                         observation = f"Error: Unknown tool type '{tool.type}'"

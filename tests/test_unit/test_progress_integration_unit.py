@@ -1,5 +1,5 @@
 """
-Unit tests for progress tracking integration with Prompt and FlowEngine.
+Unit tests for progress tracking integration with Prompt and Flow.
 
 These tests focus on testing the progress callback integration without
 requiring actual API calls or file system operations.
@@ -10,7 +10,7 @@ from pathlib import Path
 
 from orac.progress import ProgressEvent, ProgressType, ProgressTracker
 from orac.prompt import Prompt
-from orac.flow import FlowEngine, FlowSpec, FlowStep, FlowInput, FlowOutput
+from orac.flow import Flow, FlowSpec, FlowStep, FlowInput, FlowOutput
 
 
 class TestPromptProgressIntegrationUnit:
@@ -149,8 +149,8 @@ class TestPromptProgressIntegrationUnit:
         assert start_event.metadata["params"]["another_param"] == 42
 
 
-class TestFlowEngineProgressUnit:
-    """Unit tests for progress tracking in FlowEngine."""
+class TestFlowProgressUnit:
+    """Unit tests for progress tracking in Flow."""
     
     def create_test_flow_spec(self):
         """Create a simple test flow spec."""
@@ -175,11 +175,11 @@ class TestFlowEngineProgressUnit:
     
     @pytest.mark.unit
     def test_flow_engine_progress_callback_parameter(self):
-        """Test that FlowEngine accepts progress_callback parameter."""
+        """Test that Flow accepts progress_callback parameter."""
         spec = self.create_test_flow_spec()
         mock_callback = Mock()
         
-        engine = FlowEngine(spec, progress_callback=mock_callback)
+        engine = Flow(spec, progress_callback=mock_callback)
         
         assert engine.progress_callback == mock_callback
     
@@ -188,7 +188,7 @@ class TestFlowEngineProgressUnit:
         """Test that progress_callback defaults to None."""
         spec = self.create_test_flow_spec()
         
-        engine = FlowEngine(spec)
+        engine = Flow(spec)
         
         assert engine.progress_callback is None
     
@@ -199,7 +199,7 @@ class TestFlowEngineProgressUnit:
         spec = self.create_test_flow_spec()
         mock_callback = Mock()
         
-        engine = FlowEngine(spec, progress_callback=mock_callback)
+        engine = Flow(spec, progress_callback=mock_callback)
         
         # Dry run should only emit start event
         result = engine.execute({"input1": "test"}, dry_run=True)
@@ -226,7 +226,7 @@ class TestFlowEngineProgressUnit:
         mock_prompt_instance.return_value = "step1_result"
         mock_prompt_class.return_value = mock_prompt_instance
         
-        engine = FlowEngine(spec, progress_callback=mock_callback)
+        engine = Flow(spec, progress_callback=mock_callback)
         
         result = engine.execute({"input1": "test_input"})
         
@@ -284,7 +284,7 @@ class TestFlowEngineProgressUnit:
         mock_prompt_instance.side_effect = RuntimeError("Step failed")
         mock_prompt_class.return_value = mock_prompt_instance
         
-        engine = FlowEngine(spec, progress_callback=mock_callback)
+        engine = Flow(spec, progress_callback=mock_callback)
         
         with pytest.raises(Exception):  # FlowExecutionError wraps the RuntimeError
             engine.execute({"input1": "test_input"})
@@ -305,7 +305,7 @@ class TestFlowEngineProgressUnit:
     @pytest.mark.unit
     @patch('orac.flow.Prompt')
     def test_flow_engine_passes_progress_callback_to_orac(self, mock_prompt_class):
-        """Test that FlowEngine passes progress callback to Orac instances."""
+        """Test that Flow passes progress callback to Prompt instances."""
         spec = self.create_test_flow_spec()
         mock_callback = Mock()
         
@@ -313,7 +313,7 @@ class TestFlowEngineProgressUnit:
         mock_prompt_instance.return_value = "result"
         mock_prompt_class.return_value = mock_prompt_instance
         
-        engine = FlowEngine(spec, progress_callback=mock_callback)
+        engine = Flow(spec, progress_callback=mock_callback)
         engine.execute({"input1": "test"})
         
         # Verify Prompt was created with progress callback
@@ -358,7 +358,7 @@ class TestFlowEngineProgressUnit:
         mock_prompt_instance.side_effect = ["step1_result", "step2_result"]
         mock_prompt_class.return_value = mock_prompt_instance
         
-        engine = FlowEngine(spec, progress_callback=mock_callback)
+        engine = Flow(spec, progress_callback=mock_callback)
         result = engine.execute({"input1": "test"})
         
         assert result == {"final_output": "step2_result"}

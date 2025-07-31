@@ -9,11 +9,11 @@ import json
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from orac.agent import AgentSpec, AgentEngine, load_agent_spec
+from orac.agent import AgentSpec, Agent, load_agent_spec
 from orac.registry import ToolRegistry
 from orac.config import Provider
 
-class TestAgentEngine(unittest.TestCase):
+class TestAgent(unittest.TestCase):
 
     def setUp(self):
         # Create a temporary directory for agent specs and tools
@@ -53,7 +53,7 @@ class TestAgentEngine(unittest.TestCase):
             prompts_dir=str(self.temp_path / "prompts"),
             tools_dir=str(self.temp_path / "skills")
         )
-        self.engine = AgentEngine(self.agent_spec, self.registry, Provider.CUSTOM)
+        self.engine = Agent(self.agent_spec, self.registry, Provider.CUSTOM)
 
     def tearDown(self):
         self.temp_dir.cleanup()

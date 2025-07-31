@@ -7,7 +7,7 @@ from loguru import logger
 from pathlib import Path
 
 from orac.config import Config, Provider
-from orac.agent import AgentEngine, load_agent_spec
+from orac.agent import Agent, load_agent_spec
 from orac.registry import ToolRegistry
 from .utils import add_parameter_argument, convert_cli_value
 
@@ -100,7 +100,7 @@ def execute_agent(args, remaining_args):
     try:
         # Initialize components
         registry = ToolRegistry()
-        engine = AgentEngine(spec, registry, provider, api_key)
+        engine = Agent(spec, registry, provider, api_key)
         
         # Run the agent
         final_result = engine.run(**input_values)

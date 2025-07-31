@@ -7,7 +7,7 @@ from loguru import logger
 from pathlib import Path
 
 from orac.config import Config
-from orac.flow import load_flow, FlowEngine, list_flows, FlowValidationError, FlowExecutionError
+from orac.flow import load_flow, Flow, list_flows, FlowValidationError, FlowExecutionError
 from orac.cli_progress import create_cli_reporter
 from .utils import add_flow_input_argument, convert_cli_value
 
@@ -115,7 +115,7 @@ def execute_flow(args, remaining_args):
             reporter = create_cli_reporter(verbose=args.verbose, quiet=args.quiet)
             progress_callback = reporter.report
         
-        engine = FlowEngine(spec, prompts_dir=args.prompts_dir, progress_callback=progress_callback)
+        engine = Flow(spec, prompts_dir=args.prompts_dir, progress_callback=progress_callback)
         
         # Collect input values from CLI args
         inputs = {}
@@ -250,7 +250,7 @@ def show_flow_graph(flows_dir: str, flow_name: str):
     
     try:
         spec = load_flow(flow_path)
-        engine = FlowEngine(spec, prompts_dir=Config.DEFAULT_PROMPTS_DIR)
+        engine = Flow(spec, prompts_dir=Config.DEFAULT_PROMPTS_DIR)
         
         print(f"\nDependency graph for flow '{flow_name}':")
         print("-" * 50)
@@ -275,7 +275,7 @@ def test_flow_command(flows_dir: str, flow_name: str, dry_run=True):
     
     try:
         spec = load_flow(flow_path)
-        engine = FlowEngine(spec, prompts_dir=Config.DEFAULT_PROMPTS_DIR)
+        engine = Flow(spec, prompts_dir=Config.DEFAULT_PROMPTS_DIR)
         
         print(f"\n✓ Flow '{flow_name}' validation successful")
         print(f"Steps: {len(spec.steps)}")

@@ -411,10 +411,10 @@ print(chat("Hello! What's 15 + 25?"))      # → "40"
 print(chat("Times 3?"))                     # → "120" (maintains context)
 
 # Using skills programmatically
-from orac.skills import load_skill, SkillEngine
+from orac.skills import load_skill, Skill
 
 skill_spec = load_skill("orac/skills/calculator.yaml")
-engine = SkillEngine(skill_spec)
+engine = Skill(skill_spec)
 result = engine.execute({"expression": "2 + 2"})
 print(result)  # → {"result": 4.0, "expression_tree": "2 + 2"}
 ```

@@ -7,7 +7,7 @@ from loguru import logger
 from pathlib import Path
 
 from orac.config import Config
-from orac.skills import load_skill, SkillEngine, list_skills, SkillValidationError, SkillExecutionError
+from orac.skills import load_skill, Skill, list_skills, SkillValidationError, SkillExecutionError
 from orac.cli_progress import create_cli_reporter
 from .utils import add_parameter_argument, convert_cli_value
 
@@ -97,7 +97,7 @@ def execute_skill(args, remaining_args):
         if not args.quiet:
             reporter = create_cli_reporter(verbose=args.verbose, quiet=args.quiet)
             progress_callback = reporter.report
-        engine = SkillEngine(spec, skills_dir=args.skills_dir, progress_callback=progress_callback)
+        engine = Skill(spec, skills_dir=args.skills_dir, progress_callback=progress_callback)
         # Collect input values from CLI args
         inputs = {}
         for skill_input in spec.inputs:
