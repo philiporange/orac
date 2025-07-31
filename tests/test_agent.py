@@ -59,8 +59,8 @@ class TestAgentEngine(unittest.TestCase):
         self.temp_dir.cleanup()
 
     @patch('orac.agent.call_api')
-    @patch('orac.agent.Orac')
-    def test_run_loop_and_tool_execution(self, MockOrac, mock_call_api):
+    @patch('orac.agent.Prompt')
+    def test_run_loop_and_tool_execution(self, MockPrompt, mock_call_api):
         # Mock the LLM to return a specific action
         mock_call_api.return_value = json.dumps({
             "thought": "I should use the dummy prompt.",
@@ -68,9 +68,9 @@ class TestAgentEngine(unittest.TestCase):
             "inputs": {"word": "hello"}
         })
         
-        # Mock the Orac instance that gets created for the prompt
-        mock_orac_instance = MockOrac.return_value
-        mock_orac_instance.completion.return_value = "The prompt said hello."
+        # Mock the Prompt instance that gets created for the prompt
+        mock_prompt_instance = MockPrompt.return_value
+        mock_prompt_instance.completion.return_value = "The prompt said hello."
         
         # Mock a second LLM call that decides to finish
         final_answer = "I have the answer."
@@ -93,14 +93,14 @@ class TestAgentEngine(unittest.TestCase):
         # Assertions
         self.assertEqual(result, final_answer)
         
-        # Check that the Orac (prompt) tool was called correctly
-        MockOrac.assert_called_once_with(
+        # Check that the Prompt (prompt) tool was called correctly
+        MockPrompt.assert_called_once_with(
             'dummy_prompt', 
             prompts_dir=self.registry.prompts_dir, 
             provider=Provider.CUSTOM.value,
             api_key=None
         )
-        mock_orac_instance.completion.assert_called_with(word="hello")
+        mock_prompt_instance.completion.assert_called_with(word="hello")
         
         # Check that an observation was added to the history
         # The history should contain: model response, user observation, model response (finish)

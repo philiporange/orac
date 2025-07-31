@@ -14,7 +14,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
 
-from orac.orac import Orac
+from orac.prompt import Prompt
 from orac.conversation_db import ConversationDB
 from orac.config import Config
 from loguru import logger
@@ -46,8 +46,8 @@ class ChatMessage:
 class ChatInterface:
     """Interactive chat interface using curses."""
 
-    def __init__(self, orac_instance: Orac, conversation_id: Optional[str] = None):
-        self.orac = orac_instance
+    def __init__(self, prompt_instance: Prompt, conversation_id: Optional[str] = None):
+        self.orac = prompt_instance
         self.conversation_id = conversation_id or self.orac.conversation_id
         self.messages: List[ChatMessage] = []
         self.input_buffer = ""
@@ -334,10 +334,10 @@ class ChatInterface:
 
         curses.curs_set(1)
 
-def start_chat_interface(prompt_name: str, prompts_dir: Optional[str] = None, conversation_id: Optional[str] = None, **orac_kwargs):
+def start_chat_interface(prompt_name: str, prompts_dir: Optional[str] = None, conversation_id: Optional[str] = None, **prompt_kwargs):
     try:
-        orac = Orac(prompt_name=prompt_name, prompts_dir=prompts_dir, use_conversation=True, conversation_id=conversation_id, **orac_kwargs)
-        chat = ChatInterface(orac, conversation_id)
+        prompt = Prompt(prompt_name=prompt_name, prompts_dir=prompts_dir, use_conversation=True, conversation_id=conversation_id, **prompt_kwargs)
+        chat = ChatInterface(prompt, conversation_id)
         curses.wrapper(chat.run)
     except Exception as e:
         logger.error(f"Error in chat interface: {e}")

@@ -6,6 +6,8 @@ This module provides classes and functions for:
 - Building dependency graphs from flow definitions
 - Executing flows with proper step ordering and result passing
 - Template variable resolution for dynamic input mapping
+
+Flows use the Prompt class to execute individual steps.
 """
 
 import re
@@ -16,7 +18,7 @@ from pathlib import Path
 import networkx as nx
 
 from .logger import logger
-from .orac import Orac
+from .prompt import Prompt
 from .skills import SkillEngine, load_skill
 from .progress import ProgressCallback, ProgressEvent, ProgressType
 
@@ -198,9 +200,9 @@ class FlowEngine:
         try:
             if step.prompt_name:
                 # Execute a prompt step
-                orac = Orac(step.prompt_name, prompts_dir=self.prompts_dir,
-                           progress_callback=self.progress_callback)
-                result = orac(**resolved_inputs)
+                prompt = Prompt(step.prompt_name, prompts_dir=self.prompts_dir,
+                               progress_callback=self.progress_callback)
+                result = prompt(**resolved_inputs)
                 
                 # Handle different result types
                 if isinstance(result, dict):

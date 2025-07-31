@@ -327,8 +327,8 @@ def test_convert_cli_value_helper() -> None:
 
 
 def test_parameter_coercion_internal() -> None:
-    """Quick sanity check on `LLMWrapper._resolve_parameters()` using a temp prompt."""
-    from orac.orac import Orac
+    """Quick sanity check on `Prompt._resolve_parameters()` using a temp prompt."""
+    from orac.prompt import Prompt
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="orac_params_"))
     yaml_path = tmp_dir / "types.yaml"
@@ -348,7 +348,7 @@ def test_parameter_coercion_internal() -> None:
             """
         )
     )
-    wrapper = Orac("types", prompts_dir=str(tmp_dir))
+    wrapper = Prompt("types", prompts_dir=str(tmp_dir))
     params = wrapper._resolve_parameters(
         flag="yes", count="7", ratio="2.5", items="x, y ,z "
     )
@@ -362,8 +362,8 @@ def test_parameter_coercion_internal() -> None:
 
 
 def test_files_parameter() -> None:
-    """Test that Orac can be instantiated with files=[] parameter containing a list of file paths."""
-    from orac.orac import Orac
+    """Test that Prompt can be instantiated with files=[] parameter containing a list of file paths."""
+    from orac.prompt import Prompt
 
     # Create temporary files
     files = []
@@ -373,15 +373,15 @@ def test_files_parameter() -> None:
             files.append(fh.name)
 
     try:
-        # Test instantiating Orac with files parameter
-        orac = Orac("file_test", files=files)
+        # Test instantiating Prompt with files parameter
+        prompt = Prompt("file_test", files=files)
 
         # Verify files are stored correctly
-        assert orac.files == files
-        assert len(orac.files) == 3
+        assert prompt.files == files
+        assert len(prompt.files) == 3
 
         # Verify files exist and can be read
-        for file_path in orac.files:
+        for file_path in prompt.files:
             assert os.path.exists(file_path)
             with open(file_path, 'r') as f:
                 content = f.read()
@@ -398,7 +398,7 @@ def test_files_parameter() -> None:
 
 def test_config_override_hierarchy() -> None:
     """Verify the config precedence: runtime > prompt.yaml > base_config.yaml"""
-    from orac.orac import Orac
+    from orac.prompt import Prompt
 
     # 1. Create temporary config and prompt files
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -439,7 +439,7 @@ def test_config_override_hierarchy() -> None:
         # --- TEST CASES ---
 
         # Case A: Prompt overrides base config
-        wrapper_a = Orac(
+        wrapper_a = Prompt(
             "override_prompt",
             prompts_dir=str(prompts_dir),
             base_config_file=str(base_config_path),
@@ -451,7 +451,7 @@ def test_config_override_hierarchy() -> None:
         )  # Inherited
 
         # Case B: Runtime args override everything
-        wrapper_b = Orac(
+        wrapper_b = Prompt(
             "override_prompt",
             prompts_dir=str(prompts_dir),
             base_config_file=str(base_config_path),
@@ -465,7 +465,7 @@ def test_config_override_hierarchy() -> None:
         )  # Base config is merged
 
         # Case C: Simple prompt inherits fully from base config
-        wrapper_c = Orac(
+        wrapper_c = Prompt(
             "simple_prompt",
             prompts_dir=str(prompts_dir),
             base_config_file=str(base_config_path),
@@ -482,7 +482,7 @@ def test_direct_path_loading() -> None:
 
     This stays fully offline – no LLM call – so we pass a dummy provider.
     """
-    from orac.orac import Orac
+    from orac.prompt import Prompt
 
     with tempfile.TemporaryDirectory() as tmpdir:
         yaml_path = Path(tmpdir) / "direct_prompt.yaml"
@@ -497,7 +497,7 @@ def test_direct_path_loading() -> None:
             )
         )
 
-        wrapper = Orac(str(yaml_path), provider="google")  # provider required
+        wrapper = Prompt(str(yaml_path), provider="google")  # provider required
         # core invariants
         assert wrapper.prompt_name == "direct_prompt"
         assert Path(wrapper.yaml_file_path) == yaml_path
@@ -510,9 +510,9 @@ def test_direct_path_loading() -> None:
 
 def test_completion_as_json_method() -> None:
     """Test the completion_as_json method with recipe prompt (returns JSON)."""
-    from orac.orac import Orac
+    from orac.prompt import Prompt
 
-    recipe = Orac("recipe", provider="google")
+    recipe = Prompt("recipe", provider="google")
     result = recipe.completion_as_json(dish="cookies")
 
     # Should return a dict (parsed JSON)
@@ -528,10 +528,10 @@ def test_completion_as_json_method() -> None:
 
 def test_completion_as_json_with_text_prompt() -> None:
     """Test completion_as_json method fails with text-only prompt."""
-    from orac.orac import Orac
+    from orac.prompt import Prompt
     import json
 
-    capital = Orac("capital", provider="google")
+    capital = Prompt("capital", provider="google")
 
     # Should raise JSONDecodeError since capital returns plain text
     try:
@@ -546,10 +546,10 @@ def test_completion_as_json_with_text_prompt() -> None:
 
 def test_callable_interface_auto_detection() -> None:
     """Test __call__ method with automatic JSON detection."""
-    from orac.orac import Orac
+    from orac.prompt import Prompt
 
     # Test with JSON-returning prompt
-    recipe = Orac("recipe", provider="google")
+    recipe = Prompt("recipe", provider="google")
     result = recipe(dish="pancakes")
 
     # Should auto-detect and return dict
@@ -557,7 +557,7 @@ def test_callable_interface_auto_detection() -> None:
     assert "title" in result
 
     # Test with text-returning prompt
-    capital = Orac("capital", provider="google")
+    capital = Prompt("capital", provider="google")
     result = capital(country="Japan")
 
     # Should return string
@@ -569,15 +569,15 @@ def test_callable_interface_auto_detection() -> None:
 
 def test_callable_interface_force_json() -> None:
     """Test __call__ method with force_json parameter."""
-    from orac.orac import Orac
+    from orac.prompt import Prompt
 
     # Test force_json=True with JSON prompt (should succeed)
-    recipe = Orac("recipe", provider="google")
+    recipe = Prompt("recipe", provider="google")
     result = recipe(dish="cookies", force_json=True)
     assert isinstance(result, dict)
 
     # Test force_json=True with text prompt (should fail)
-    capital = Orac("capital", provider="google")
+    capital = Prompt("capital", provider="google")
     try:
         capital(country="France", force_json=True)
         assert False, "Expected ValueError but method succeeded"
@@ -589,10 +589,10 @@ def test_callable_interface_force_json() -> None:
 
 def test_callable_interface_parameters() -> None:
     """Test that __call__ method accepts all completion parameters."""
-    from orac.orac import Orac
+    from orac.prompt import Prompt
 
     # Test with various parameters
-    recipe = Orac("recipe", provider="google")
+    recipe = Prompt("recipe", provider="google")
     result = recipe(
         dish="tacos",
         generation_config={"temperature": 0.1},
@@ -610,19 +610,19 @@ def test_callable_interface_parameters() -> None:
 # --------------------------------------------------------------------------- #
 def test_conversation_basic() -> None:
     """Test basic conversation functionality."""
-    from orac.orac import Orac
+    from orac.prompt import Prompt
     import uuid
 
     # Create unique conversation ID for this test
     conv_id = f"test_{uuid.uuid4()}"
 
     # First message
-    chat = Orac("capital", use_conversation=True, conversation_id=conv_id)
+    chat = Prompt("capital", use_conversation=True, conversation_id=conv_id)
     response1 = chat.completion(country="France")
     assert "paris" in response1.lower()
 
     # Second message should have context
-    chat2 = Orac("capital", use_conversation=True, conversation_id=conv_id)
+    chat2 = Prompt("capital", use_conversation=True, conversation_id=conv_id)
     history = chat2.get_conversation_history()
     assert len(history) == 2  # User + Assistant messages
     assert history[0]["role"] == "user"
@@ -638,13 +638,13 @@ def test_conversation_basic() -> None:
 
 def test_conversation_reset() -> None:
     """Test conversation reset functionality."""
-    from orac.orac import Orac
+    from orac.prompt import Prompt
     import uuid
 
     conv_id = f"test_{uuid.uuid4()}"
 
     # Create conversation with messages
-    chat = Orac("capital", use_conversation=True, conversation_id=conv_id)
+    chat = Prompt("capital", use_conversation=True, conversation_id=conv_id)
     chat.completion(country="Japan")
 
     # Verify messages exist
@@ -708,10 +708,10 @@ def test_conversation_cli() -> None:
 
 def test_conversation_auto_id() -> None:
     """Test automatic conversation ID generation."""
-    from orac.orac import Orac
+    from orac.prompt import Prompt
 
     # Create without specifying ID
-    chat = Orac("capital", use_conversation=True)
+    chat = Prompt("capital", use_conversation=True)
     assert chat.conversation_id is not None
     assert len(chat.conversation_id) > 0
 
@@ -731,10 +731,10 @@ def test_conversation_auto_id() -> None:
 
 def test_conversation_disabled_by_default() -> None:
     """Test that conversations are disabled by default."""
-    from orac.orac import Orac
+    from orac.prompt import Prompt
 
     # Create without conversation flag
-    llm = Orac("capital")
+    llm = Prompt("capital")
     assert llm.use_conversation is False
 
     # Should raise error when trying to use conversation methods

@@ -18,7 +18,7 @@
 * **File support**: Attach local or remote files (e.g., images, documents) via `files:` or `file_urls:` in YAML or CLI flags.
 * **Conversation mode**: Automatic context preservation with SQLite-based history. Enable with `conversation: true` in YAML for seamless multi-turn interactions.
 * **Intuitive CLI**: Modern resource-action command structure with excellent discoverability and help system.
-* **Python API**: Full programmatic access via the `Orac` class for integration into applications.
+* **Python API**: Full programmatic access via the `Prompt` class for integration into applications.
 * **Runtime configuration overrides**: Override model settings, API keys, generation options, and safety filters from the CLI or programmatically.
 * **Structured output support**: Request `application/json` responses or validate against a JSON Schema.
 * **Parameter validation**: Automatically convert and validate inputs by type.
@@ -388,15 +388,15 @@ orac search "translate"               # Find translation-related resources
 While the CLI provides an excellent user experience, you can also use Orac programmatically:
 
 ```python
-from orac import Orac
+from orac import Prompt
 
 # Basic text completion
-llm = Orac("capital")
+llm = Prompt("capital")
 print(llm.completion())  # Defaults to France → "Paris"
 print(llm.completion(country="Japan"))  # → "Tokyo"
 
 # JSON-returning prompts with automatic detection
-recipe_llm = Orac("recipe")
+recipe_llm = Prompt("recipe")
 result = recipe_llm(dish="cookies")  # Automatically returns dict (JSON detected)
 
 # Force JSON parsing (raises exception if not valid JSON)
@@ -406,7 +406,7 @@ json_result = recipe_llm(dish="pasta", force_json=True)  # Returns dict
 json_data = recipe_llm.completion_as_json(dish="pizza")  # Returns dict
 
 # Conversation mode
-chat = Orac("chat", use_conversation=True)
+chat = Prompt("chat", use_conversation=True)
 print(chat("Hello! What's 15 + 25?"))      # → "40"
 print(chat("Times 3?"))                     # → "120" (maintains context)
 
@@ -604,24 +604,6 @@ All commands support these global flags:
 
 ---
 
-## Migration Guide
-
-### From Old CLI Structure
-If you're upgrading from the old CLI structure, here's how commands map:
-
-| Old Command | New Command |
-|-------------|-------------|
-| `orac capital --country France` | `orac prompt run capital --country France` |
-| `orac workflow run research_assistant` | `orac flow run research_assistant` |
-| `orac chat --message "hello"` | `orac chat send "hello"` |
-
-**Quick migration**: Use the shortcut aliases during transition:
-- `orac run` → `orac prompt run`
-- `orac flow` → `orac flow run` (only the `run` is implicit now)
-- `orac ask` → `orac chat send`
-
----
-
 ## Logging and Debugging
 
 Orac provides comprehensive logging with two output modes:
@@ -680,7 +662,7 @@ orac/
 ├── conversation_db.py      # Conversation storage
 ├── flow.py                 # Flow engine
 ├── logger.py               # Logging configuration
-├── orac.py                 # Core Orac class
+├── prompt.py               # Core Prompt class
 ├── progress.py             # Progress tracking infrastructure
 ├── registry.py             # Tool registry for agents
 ├── skills.py               # Skills execution engine

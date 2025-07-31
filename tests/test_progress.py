@@ -18,7 +18,7 @@ from orac.progress import (
     create_simple_callback
 )
 from orac.cli_progress import CLIProgressReporter, StreamingProgressReporter, create_cli_reporter
-from orac.orac import Orac
+from orac.prompt import Prompt
 from orac.flow import FlowEngine, FlowSpec, FlowStep, FlowInput, FlowOutput
 
 
@@ -324,10 +324,10 @@ class TestCreateSimpleCallback:
         assert "🎉" in captured.out
 
 
-# Integration tests would go here but require actual Orac setup
-# These would test the progress callbacks in real Orac and FlowEngine usage
+# Integration tests would go here but require actual Prompt setup
+# These would test the progress callbacks in real Prompt and FlowEngine usage
 class TestProgressIntegration:
-    """Test progress tracking integration with Orac components."""
+    """Test progress tracking integration with Prompt components."""
     
     def test_progress_callback_interface(self):
         """Test that progress callback interface works correctly."""
@@ -336,7 +336,7 @@ class TestProgressIntegration:
         def capture_progress(event: ProgressEvent):
             events.append(event)
         
-        # This would be a real test with a mock Orac instance
+        # This would be a real test with a mock Prompt instance
         # For now, just verify the interface works
         event = ProgressEvent(ProgressType.PROMPT_START, "Test")
         capture_progress(event)

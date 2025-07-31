@@ -1,5 +1,5 @@
 """
-Unit tests for progress tracking integration with Orac and FlowEngine.
+Unit tests for progress tracking integration with Prompt and FlowEngine.
 
 These tests focus on testing the progress callback integration without
 requiring actual API calls or file system operations.
@@ -9,47 +9,47 @@ from unittest.mock import Mock, patch, MagicMock, call
 from pathlib import Path
 
 from orac.progress import ProgressEvent, ProgressType, ProgressTracker
-from orac.orac import Orac
+from orac.prompt import Prompt
 from orac.flow import FlowEngine, FlowSpec, FlowStep, FlowInput, FlowOutput
 
 
-class TestOracProgressIntegrationUnit:
-    """Unit tests for progress tracking in Orac class."""
+class TestPromptProgressIntegrationUnit:
+    """Unit tests for progress tracking in Prompt class."""
     
     @pytest.mark.unit
-    def test_orac_progress_callback_parameter(self, test_prompts_dir):
-        """Test that Orac accepts progress_callback parameter."""
+    def test_prompt_progress_callback_parameter(self, test_prompts_dir):
+        """Test that Prompt accepts progress_callback parameter."""
         mock_callback = Mock()
         
-        orac = Orac(
+        prompt = Prompt(
             "test_prompt", 
             prompts_dir=str(test_prompts_dir),
             progress_callback=mock_callback
         )
         
-        assert orac.progress_callback == mock_callback
+        assert prompt.progress_callback == mock_callback
     
     @pytest.mark.unit
-    def test_orac_progress_callback_none_by_default(self, test_prompts_dir):
+    def test_prompt_progress_callback_none_by_default(self, test_prompts_dir):
         """Test that progress_callback defaults to None."""
-        orac = Orac("test_prompt", prompts_dir=str(test_prompts_dir))
+        prompt = Prompt("test_prompt", prompts_dir=str(test_prompts_dir))
         
-        assert orac.progress_callback is None
+        assert prompt.progress_callback is None
     
     @pytest.mark.unit
-    @patch('orac.orac.call_api')
-    def test_orac_progress_events_emitted(self, mock_call_api, test_prompts_dir):
-        """Test that Orac emits progress events during completion."""
+    @patch('orac.prompt.call_api')
+    def test_prompt_progress_events_emitted(self, mock_call_api, test_prompts_dir):
+        """Test that Prompt emits progress events during completion."""
         mock_call_api.return_value = "Test response"
         mock_callback = Mock()
         
-        orac = Orac(
+        prompt = Prompt(
             "test_prompt", 
             prompts_dir=str(test_prompts_dir),
             progress_callback=mock_callback
         )
         
-        result = orac.completion()
+        result = prompt.completion()
         
         # Verify result
         assert result == "Test response"
@@ -82,20 +82,20 @@ class TestOracProgressIntegrationUnit:
         assert complete_event.metadata["prompt_name"] == "test_prompt"
     
     @pytest.mark.unit
-    @patch('orac.orac.call_api')
-    def test_orac_progress_error_handling(self, mock_call_api, test_prompts_dir):
-        """Test that Orac emits error events when completion fails."""
+    @patch('orac.prompt.call_api')
+    def test_prompt_progress_error_handling(self, mock_call_api, test_prompts_dir):
+        """Test that Prompt emits error events when completion fails."""
         mock_call_api.side_effect = RuntimeError("API failed")
         mock_callback = Mock()
         
-        orac = Orac(
+        prompt = Prompt(
             "test_prompt", 
             prompts_dir=str(test_prompts_dir),
             progress_callback=mock_callback
         )
         
         with pytest.raises(RuntimeError, match="API failed"):
-            orac.completion()
+            prompt.completion()
         
         # Verify error event was emitted
         calls = mock_callback.call_args_list
@@ -110,34 +110,34 @@ class TestOracProgressIntegrationUnit:
         assert error_event.metadata["error_type"] == "RuntimeError"
     
     @pytest.mark.unit
-    @patch('orac.orac.call_api')
-    def test_orac_no_progress_callback_works_normally(self, mock_call_api, test_prompts_dir):
-        """Test that Orac works normally without progress callback."""
+    @patch('orac.prompt.call_api')
+    def test_prompt_no_progress_callback_works_normally(self, mock_call_api, test_prompts_dir):
+        """Test that Prompt works normally without progress callback."""
         mock_call_api.return_value = "Test response"
         
-        orac = Orac("test_prompt", prompts_dir=str(test_prompts_dir))
+        prompt = Prompt("test_prompt", prompts_dir=str(test_prompts_dir))
         
-        result = orac.completion()
+        result = prompt.completion()
         
         assert result == "Test response"
         mock_call_api.assert_called_once()
         # No exceptions should be raised
     
     @pytest.mark.unit
-    @patch('orac.orac.call_api')
-    def test_orac_progress_metadata_includes_parameters(self, mock_call_api, test_prompts_dir):
+    @patch('orac.prompt.call_api')
+    def test_prompt_progress_metadata_includes_parameters(self, mock_call_api, test_prompts_dir):
         """Test that progress events include parameter metadata."""
         mock_call_api.return_value = "Test response"
         mock_callback = Mock()
         
-        orac = Orac(
+        prompt = Prompt(
             "test_prompt", 
             prompts_dir=str(test_prompts_dir),
             progress_callback=mock_callback
         )
         
         # Call with parameters
-        result = orac.completion(test_param="test_value", another_param=42)
+        result = prompt.completion(test_param="test_value", another_param=42)
         
         # Check start event includes parameters
         calls = mock_callback.call_args_list
@@ -193,8 +193,8 @@ class TestFlowEngineProgressUnit:
         assert engine.progress_callback is None
     
     @pytest.mark.unit
-    @patch('orac.flow.Orac')
-    def test_flow_engine_progress_events_dry_run(self, mock_orac_class):
+    @patch('orac.flow.Prompt')
+    def test_flow_engine_progress_events_dry_run(self, mock_prompt_class):
         """Test flow progress events in dry run mode."""
         spec = self.create_test_flow_spec()
         mock_callback = Mock()
@@ -215,16 +215,16 @@ class TestFlowEngineProgressUnit:
         assert event.metadata["dry_run"] is True
     
     @pytest.mark.unit
-    @patch('orac.flow.Orac')
-    def test_flow_engine_progress_events_full_flow(self, mock_orac_class):
+    @patch('orac.flow.Prompt')
+    def test_flow_engine_progress_events_full_flow(self, mock_prompt_class):
         """Test flow progress events for full execution."""
         spec = self.create_test_flow_spec()
         mock_callback = Mock()
         
-        # Mock Orac instance
-        mock_orac_instance = Mock()
-        mock_orac_instance.return_value = "step1_result"
-        mock_orac_class.return_value = mock_orac_instance
+        # Mock Prompt instance
+        mock_prompt_instance = Mock()
+        mock_prompt_instance.return_value = "step1_result"
+        mock_prompt_class.return_value = mock_prompt_instance
         
         engine = FlowEngine(spec, progress_callback=mock_callback)
         
@@ -273,16 +273,16 @@ class TestFlowEngineProgressUnit:
         assert complete_event.metadata["flow_name"] == "test_flow"
     
     @pytest.mark.unit
-    @patch('orac.flow.Orac')
-    def test_flow_engine_progress_error_handling(self, mock_orac_class):
+    @patch('orac.flow.Prompt')
+    def test_flow_engine_progress_error_handling(self, mock_prompt_class):
         """Test flow progress error handling."""
         spec = self.create_test_flow_spec()
         mock_callback = Mock()
         
-        # Mock Orac to raise an exception
-        mock_orac_instance = Mock()
-        mock_orac_instance.side_effect = RuntimeError("Step failed")
-        mock_orac_class.return_value = mock_orac_instance
+        # Mock Prompt to raise an exception
+        mock_prompt_instance = Mock()
+        mock_prompt_instance.side_effect = RuntimeError("Step failed")
+        mock_prompt_class.return_value = mock_prompt_instance
         
         engine = FlowEngine(spec, progress_callback=mock_callback)
         
@@ -303,30 +303,30 @@ class TestFlowEngineProgressUnit:
         assert step_error.step_name == "step1"
     
     @pytest.mark.unit
-    @patch('orac.flow.Orac')
-    def test_flow_engine_passes_progress_callback_to_orac(self, mock_orac_class):
+    @patch('orac.flow.Prompt')
+    def test_flow_engine_passes_progress_callback_to_orac(self, mock_prompt_class):
         """Test that FlowEngine passes progress callback to Orac instances."""
         spec = self.create_test_flow_spec()
         mock_callback = Mock()
         
-        mock_orac_instance = Mock()
-        mock_orac_instance.return_value = "result"
-        mock_orac_class.return_value = mock_orac_instance
+        mock_prompt_instance = Mock()
+        mock_prompt_instance.return_value = "result"
+        mock_prompt_class.return_value = mock_prompt_instance
         
         engine = FlowEngine(spec, progress_callback=mock_callback)
         engine.execute({"input1": "test"})
         
-        # Verify Orac was created with progress callback
-        mock_orac_class.assert_called_once()
-        call_args = mock_orac_class.call_args
+        # Verify Prompt was created with progress callback
+        mock_prompt_class.assert_called_once()
+        call_args = mock_prompt_class.call_args
         
         # Check that progress_callback was passed
         assert 'progress_callback' in call_args.kwargs
         assert call_args.kwargs['progress_callback'] == mock_callback
     
     @pytest.mark.unit
-    @patch('orac.flow.Orac')
-    def test_flow_engine_multi_step_progress(self, mock_orac_class):
+    @patch('orac.flow.Prompt')
+    def test_flow_engine_multi_step_progress(self, mock_prompt_class):
         """Test progress tracking for multi-step flow."""
         # Create multi-step flow
         spec = FlowSpec(
@@ -353,10 +353,10 @@ class TestFlowEngineProgressUnit:
         
         mock_callback = Mock()
         
-        # Mock Orac instances
-        mock_orac_instance = Mock()
-        mock_orac_instance.side_effect = ["step1_result", "step2_result"]
-        mock_orac_class.return_value = mock_orac_instance
+        # Mock Prompt instances
+        mock_prompt_instance = Mock()
+        mock_prompt_instance.side_effect = ["step1_result", "step2_result"]
+        mock_prompt_class.return_value = mock_prompt_instance
         
         engine = FlowEngine(spec, progress_callback=mock_callback)
         result = engine.execute({"input1": "test"})

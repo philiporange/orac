@@ -121,9 +121,9 @@ def _download_remote_file(url: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# LLMWrapper                                                                  #
+# Prompt Class                                                                #
 # --------------------------------------------------------------------------- #
-class Orac:
+class Prompt:
     """
     High-level helper that:
       • loads YAML prompt specs,
@@ -152,7 +152,7 @@ class Orac:
         max_history: Optional[int] = None,
         progress_callback: Optional[ProgressCallback] = None,
     ):
-        # Detect “direct file” mode (prompt_name points to a real .yaml file)
+        # Detect "direct file" mode (prompt_name points to a real .yaml file)
         pn_path = Path(prompt_name)
         if pn_path.suffix.lower() in {".yaml", ".yml"}:
             if not pn_path.is_file():
@@ -195,7 +195,7 @@ class Orac:
             )
 
         logger.debug(
-            f"Initialising Orac for prompt: {self.prompt_name} "
+            f"Initialising Prompt for prompt: {self.prompt_name} "
             f"(provider: {self.provider.value})"
         )
 

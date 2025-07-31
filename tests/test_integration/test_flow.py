@@ -90,7 +90,7 @@ steps:
         assert "flow2" in flow_names
 
     @pytest.mark.integration
-    @patch('orac.orac.call_api')
+    @patch('orac.prompt.call_api')
     def test_simple_flow_execution(self, mock_call_api, temp_dir, test_prompts_dir):
         """Test execution of a simple single-step flow."""
         mock_call_api.return_value = "Processed: Hello World"
@@ -137,7 +137,7 @@ steps:
 
 
     @pytest.mark.integration
-    @patch('orac.orac.call_api')
+    @patch('orac.prompt.call_api')
     def test_flow_execution_error(self, mock_call_api, temp_dir, test_prompts_dir):
         """Test flow execution error handling."""
         # Mock API call to raise an exception
@@ -173,7 +173,7 @@ steps:
 
 
     @pytest.mark.integration
-    @patch('orac.orac.call_api')
+    @patch('orac.prompt.call_api')
     def test_flow_with_skill_step(self, mock_call_api, temp_dir, test_prompts_dir, test_skills_dir):
         """Test a flow that includes a skill step."""
         mock_call_api.return_value = "Analyzed: 8.0"
@@ -224,7 +224,7 @@ class TestFlowInputOutput:
 
 
     @pytest.mark.integration
-    @patch('orac.orac.call_api')
+    @patch('orac.prompt.call_api')
     def test_output_mapping(self, mock_call_api, temp_dir, test_prompts_dir):
         """Test flow output mapping from step results."""
         mock_call_api.return_value = "Step Output"

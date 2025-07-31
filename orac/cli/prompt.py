@@ -7,7 +7,7 @@ from loguru import logger
 from pathlib import Path
 
 from orac.config import Config
-from orac.orac import Orac
+from orac.prompt import Prompt
 from orac.cli_progress import create_cli_reporter
 from .utils import load_prompt_spec, convert_cli_value, add_parameter_argument, safe_json_parse
 
@@ -172,9 +172,9 @@ def execute_prompt(args, remaining_args):
 
     logger.debug(f"Final parameter values: {param_values}")
 
-    # Create Orac instance and execute
+    # Create Prompt instance and execute
     try:
-        logger.debug("Creating Orac instance")
+        logger.debug("Creating Prompt instance")
         
         # Create progress reporter if not quiet
         progress_callback = None
@@ -182,7 +182,7 @@ def execute_prompt(args, remaining_args):
             reporter = create_cli_reporter(verbose=args.verbose, quiet=args.quiet)
             progress_callback = reporter.report
         
-        wrapper = Orac(
+        wrapper = Prompt(
             prompt_name=args.name,
             prompts_dir=args.prompts_dir,
             model_name=args.model_name,

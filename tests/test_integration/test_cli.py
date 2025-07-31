@@ -21,7 +21,7 @@ class TestCLI:
     """Tests for core CLI functionality."""
 
     @pytest.mark.integration
-    @patch('orac.orac.call_api')
+    @patch('orac.prompt.call_api')
     def test_basic_prompt_execution(self, mock_call_api, test_prompts_dir, monkeypatch, capsys):
         """Test basic prompt execution via CLI."""
         mock_call_api.return_value = "Paris"
@@ -38,7 +38,7 @@ class TestCLI:
         assert "Paris" in captured.out
 
     @pytest.mark.integration
-    @patch('orac.orac.call_api')
+    @patch('orac.prompt.call_api')
     def test_prompt_with_parameters(self, mock_call_api, test_prompts_dir, monkeypatch, capsys):
         """Test prompt execution with custom parameters."""
         mock_call_api.return_value = "Tokyo"
@@ -65,7 +65,7 @@ class TestCLI:
         assert "Parameters" in captured.out or "country" in captured.out
 
     @pytest.mark.integration
-    @patch('orac.orac.call_api')
+    @patch('orac.prompt.call_api')
     def test_json_response_handling(self, mock_call_api, test_prompts_dir, monkeypatch, capsys):
         """Test CLI handling of JSON responses."""
         mock_response = {"title": "Pasta Recipe", "time": "20 minutes"}

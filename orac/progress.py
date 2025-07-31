@@ -4,6 +4,8 @@ Progress tracking infrastructure for Orac operations.
 This module provides a callback-based progress tracking system that allows
 users to monitor the execution of prompts and flows without affecting
 the core functionality.
+
+The Prompt class and FlowEngine emit progress events throughout their execution.
 """
 from __future__ import annotations
 

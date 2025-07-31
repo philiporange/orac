@@ -94,9 +94,9 @@ def handle_chat_interactive(args):
         gen_config = safe_json_parse("generation_config", args.generation_config)
     
     try:
-        # Prepare arguments for the Orac instance
+        # Prepare arguments for the Prompt instance
         # Note: use_conversation is hardcoded to True in start_chat_interface, so don't pass it here
-        orac_kwargs = {
+        prompt_kwargs = {
             'model_name': args.model_name,
             'api_key': args.api_key,  
             'provider': args.provider,
@@ -105,14 +105,14 @@ def handle_chat_interactive(args):
             'auto_save': not getattr(args, 'no_save', False),
         }
         
-        # Remove None values to avoid passing them to Orac
-        orac_kwargs = {k: v for k, v in orac_kwargs.items() if v is not None}
+        # Remove None values to avoid passing them to Prompt
+        prompt_kwargs = {k: v for k, v in prompt_kwargs.items() if v is not None}
         
         # Start the interactive chat interface
         start_chat_interface(
             prompt_name=args.prompt_name,
             conversation_id=getattr(args, 'conversation_id', None),
-            **orac_kwargs
+            **prompt_kwargs
         )
         
     except Exception as e:
@@ -130,7 +130,7 @@ def send_chat_message(args):
     
     # Create a simple chat prompt if needed
     try:
-        from orac.orac import Orac
+        from orac.prompt import Prompt
         
         # Create progress reporter if not quiet
         progress_callback = None
@@ -138,7 +138,7 @@ def send_chat_message(args):
             reporter = create_cli_reporter(verbose=args.verbose, quiet=args.quiet)
             progress_callback = reporter.report
         
-        wrapper = Orac(
+        wrapper = Prompt(
             prompt_name='chat',  # Assume a 'chat' prompt exists
             model_name=args.model_name,
             api_key=args.api_key,

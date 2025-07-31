@@ -8,7 +8,7 @@ from string import Template
 from .config import Config, Provider
 from .registry import ToolRegistry, RegisteredTool
 from .client import call_api
-from .orac import Orac, _inject_response_format
+from .prompt import Prompt, _inject_response_format
 from .flow import FlowEngine, load_flow
 from .skills import SkillEngine, load_skill
 from .logger import logger
@@ -97,8 +97,8 @@ class AgentEngine:
             else:
                 try:
                     if tool.type == "prompt":
-                        orac_instance = Orac(tool.name, prompts_dir=self.registry.prompts_dir, provider=self.provider.value, api_key=self.api_key)
-                        observation = orac_instance.completion(**tool_inputs)
+                        prompt_instance = Prompt(tool.name, prompts_dir=self.registry.prompts_dir, provider=self.provider.value, api_key=self.api_key)
+                        observation = prompt_instance.completion(**tool_inputs)
                     elif tool.type == "flow":
                         flow_spec = load_flow(tool.file_path)
                         flow_engine = FlowEngine(flow_spec)
