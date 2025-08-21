@@ -1,0 +1,29 @@
+name: research_team
+description: Research team with leader coordinating specialists
+leader: research_lead
+agents:
+  - web_researcher
+  - fact_checker
+  - report_writer
+
+inputs:
+  - name: topic
+    type: string
+    required: true
+    description: Research topic or question
+  - name: depth
+    type: string
+    default: standard
+    description: Research depth (quick, standard, comprehensive)
+
+outputs:
+  - name: research_report
+    type: string
+    description: Complete research findings
+
+constitution: |
+  Research Team Guidelines:
+  - All facts must be verified by the fact_checker
+  - Web research must cite sources
+  - Final report must be clear and well-structured
+  - Leader coordinates all delegation and synthesis

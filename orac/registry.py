@@ -21,10 +21,12 @@ class ToolRegistry:
         prompts_dir: Optional[str] = None,
         flows_dir: Optional[str] = None,
         tools_dir: Optional[str] = None,
+        teams_dir: Optional[str] = None,
     ):
         self.prompts_dir = Path(prompts_dir) if prompts_dir else Config.get_prompts_dir()
         self.flows_dir = Path(flows_dir) if flows_dir else Config.get_flows_dir()
         self.tools_dir = Path(tools_dir) if tools_dir else Config.get_skills_dir()
+        self.teams_dir = Path(teams_dir) if teams_dir else (Config.PROJECT_ROOT / "orac" / "teams")
         self.tools: Dict[str, RegisteredTool] = {}
         self._load_all()
 
@@ -32,6 +34,7 @@ class ToolRegistry:
         self._load_prompts()
         self._load_flows()
         self._load_tools()
+        self._load_teams()
 
     def _load_from_dir(self, directory: Path, tool_type: str):
         if not directory.exists():
@@ -64,6 +67,9 @@ class ToolRegistry:
         
     def _load_tools(self):
         self._load_from_dir(self.tools_dir, "tool")
+        
+    def _load_teams(self):
+        self._load_from_dir(self.teams_dir, "team")
 
     def get_tool(self, tool_name: str) -> Optional[RegisteredTool]:
         return self.tools.get(tool_name)

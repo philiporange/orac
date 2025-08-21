@@ -11,6 +11,7 @@
 * **Prompt-as-config**: Define entire LLM tasks in YAML, including prompt text, parameters, default values, model settings, and file attachments.
 * **Flow orchestration**: Chain multiple prompts together with data flow and dependency management. Perfect for complex multi-step AI workflows.
 * **Autonomous agents**: ReAct-style agents that can reason and use tools to accomplish complex goals.
+* **Collaborative teams**: Multi-agent teams with leader orchestration for complex collaborative tasks.
 * **Skills system**: Executable Python skills with YAML specifications for custom functionality.
 * **Tool registry**: Unified interface for discovering and using prompts, flows, and skills as agent tools.
 * **Hierarchical configuration**: Three-layer config system (base → prompt → runtime) with deep merging for flexible overrides.
@@ -62,6 +63,7 @@ pip install -e .
    orac flow list          # List all available flows
    orac skill list         # List all available skills
    orac agent list         # List all available agents
+   orac team list          # List all available teams
    orac --help             # Show all commands
    ```
 
@@ -123,6 +125,17 @@ orac agent run geo_cuisine_agent --country "Japan"
 # Discover and explore agents
 orac agent list                         # List all agents
 orac agent show research_agent          # Show agent details
+```
+
+#### **Teams** - Collaborative agent teams
+```bash
+# Execute a team
+orac team run research_team --topic "AI ethics" --depth comprehensive
+orac team run dev_team --requirement "REST API for users" --language python
+
+# Discover and explore teams
+orac team list                          # List all teams
+orac team show research_team            # Show team structure and members
 ```
 
 #### **Chat** - Interactive conversations
@@ -335,7 +348,46 @@ orac agent run geo_cuisine_agent --country "Thailand"
 The agent will show its thought process and tool usage, ultimately producing a result like:
 *The capital of Thailand is Bangkok. A traditional recipe you can try is Pad Thai...*
 
-### 6. Advanced Usage
+### 6. Collaborative Teams
+
+Create teams of specialist agents coordinated by a leader for complex collaborative tasks.
+
+**File:** `orac/teams/research_team.yaml`
+```yaml
+name: research_team
+description: Research team with leader coordinating specialists
+leader: research_lead
+agents:
+  - web_researcher
+  - fact_checker
+  - report_writer
+
+inputs:
+  - name: topic
+    type: string
+    required: true
+    description: Research topic or question
+  - name: depth
+    type: string
+    default: standard
+    description: Research depth (quick, standard, comprehensive)
+
+constitution: |
+  Research Team Guidelines:
+  - All facts must be verified by the fact_checker
+  - Web research must cite sources
+  - Final report must be clear and well-structured
+  - Leader coordinates all delegation and synthesis
+```
+
+Then, run the team from the command line:
+```bash
+orac team run research_team --topic "quantum computing applications" --depth comprehensive
+```
+
+The leader will coordinate the team, delegating tasks to specialists and synthesizing their contributions into a final research report.
+
+### 7. Advanced Usage
 
 ```bash
 # Override model and configuration
@@ -356,7 +408,7 @@ orac prompt run analyze_document \
   --file-url https://example.com/image.jpg
 ```
 
-### 7. Discovery and Help
+### 8. Discovery and Help
 
 ```bash
 # Discover available resources
@@ -365,12 +417,14 @@ orac prompt list                       # Show only prompts
 orac flow list                         # Show only flows
 orac skill list                        # Show only skills
 orac agent list                        # Show only agents
+orac team list                         # Show only teams
 
 # Get detailed help
 orac prompt show capital               # Show prompt parameters
 orac flow show research_assistant      # Show flow structure
 orac skill show calculator             # Show skill inputs/outputs
 orac agent show research_agent         # Show agent configuration
+orac team show research_team           # Show team structure and members
 orac --help                           # Show all available commands
 
 # Search by keyword

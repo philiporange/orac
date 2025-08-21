@@ -39,6 +39,7 @@ def needs_api_access(args):
         'prompt': ['run'],
         'flow': ['run'], 
         'agent': ['run'],
+        'team': ['run'],
         'chat': ['send', 'interactive']
     }
     
@@ -182,13 +183,14 @@ def main():
     )
     
     # Import resource modules and set up parsers
-    from . import prompt, flow, skill, agent, chat, management
+    from . import prompt, flow, skill, agent, team, chat, management
     
     # Add resource parsers
     prompt.add_prompt_parser(subparsers)
     flow.add_flow_parser(subparsers)
     skill.add_skill_parser(subparsers)
     agent.add_agent_parser(subparsers)
+    team.add_team_parser(subparsers)
     chat.add_chat_parser(subparsers)
     management.add_config_parser(subparsers)
     management.add_auth_parser(subparsers)
@@ -217,6 +219,8 @@ def main():
         skill.handle_skill_commands(args, remaining) 
     elif args.resource == 'agent':
         agent.handle_agent_commands(args, remaining)
+    elif args.resource == 'team':
+        team.handle_team_commands(args, remaining)
     elif args.resource == 'chat':
         chat.handle_chat_commands(args, remaining)
     elif args.resource == 'config':  
@@ -277,7 +281,7 @@ def handle_shortcuts_and_parse(parser):
         elif first_arg == 'flow' and len(argv) > 1 and argv[1] not in ['run', 'list', 'show', 'graph', 'test']:
             argv = ['flow', 'run'] + argv[1:]
         # Legacy single-prompt mode (no resource specified)
-        elif first_arg not in ['prompt', 'flow', 'skill', 'agent', 'chat', 'config', 'auth', 'list', 'search'] and not first_arg.startswith('-'):
+        elif first_arg not in ['prompt', 'flow', 'skill', 'agent', 'team', 'chat', 'config', 'auth', 'list', 'search'] and not first_arg.startswith('-'):
             # Assume it's a prompt name - convert to new format
             argv = ['prompt', 'run'] + argv
     
@@ -305,7 +309,7 @@ def handle_global_commands(args, remaining):
 
 
 def list_all_command():
-    """List all prompts and flows."""
+    """List all prompts, flows, skills, agents and teams."""
     print("All Available Resources:")
     print("=" * 50)
     
@@ -316,6 +320,21 @@ def list_all_command():
     # List flows
     print("\nFLOWS:")
     list_flows_command(str(Config.get_flows_dir()))
+    
+    # List skills
+    print("\nSKILLS:")
+    from .skill import list_skills_command
+    list_skills_command(str(Config.get_skills_dir()))
+    
+    # List agents
+    print("\nAGENTS:")
+    from .agent import list_agents_command
+    list_agents_command(str(Config.get_agents_dir()))
+    
+    # List teams
+    print("\nTEAMS:")
+    from .team import list_teams_command
+    list_teams_command("orac/teams")
 
 
 def list_prompts_command(prompts_dir: str):

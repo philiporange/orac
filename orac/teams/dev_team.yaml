@@ -1,0 +1,29 @@
+name: dev_team
+description: Development team for software projects
+leader: tech_lead
+agents:
+  - backend_dev
+  - frontend_dev
+  - tester
+
+inputs:
+  - name: requirement
+    type: string
+    required: true
+    description: Software requirement to implement
+  - name: language
+    type: string
+    default: python
+    description: Programming language
+
+outputs:
+  - name: implementation
+    type: string
+    description: Complete code implementation
+
+constitution: |
+  Development Team Rules:
+  - All code must be reviewed by tech_lead
+  - Backend and frontend work in coordination
+  - All features must include tests
+  - Code must follow team standards
