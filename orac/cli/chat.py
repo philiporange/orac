@@ -98,9 +98,7 @@ def handle_chat_interactive(args):
         # Note: use_conversation is hardcoded to True in start_chat_interface, so don't pass it here
         prompt_kwargs = {
             'model_name': args.model_name,
-            'api_key': args.api_key,  
             'provider': args.provider,
-            'base_url': getattr(args, 'base_url', None),
             'generation_config': gen_config,
             'auto_save': not getattr(args, 'no_save', False),
         }
@@ -141,9 +139,7 @@ def send_chat_message(args):
         wrapper = Prompt(
             prompt_name='chat',  # Assume a 'chat' prompt exists
             model_name=args.model_name,
-            api_key=args.api_key,
             provider=args.provider,
-            base_url=getattr(args, 'base_url', None),
             generation_config=gen_config,
             conversation_id=getattr(args, 'conversation_id', None),
             auto_save=not getattr(args, 'no_save', False),
@@ -180,7 +176,7 @@ def list_conversations_command(prompts_dir: str):
     """List all conversations in the database."""
     from orac.conversation_db import ConversationDB
 
-    db = ConversationDB(Config.CONVERSATION_DB)
+    db = ConversationDB(Config.get_conversation_db_path())
     conversations = db.list_conversations()
 
     if not conversations:
@@ -207,7 +203,7 @@ def delete_conversation_command(conversation_id: str):
     """Delete a specific conversation."""
     from orac.conversation_db import ConversationDB
 
-    db = ConversationDB(Config.CONVERSATION_DB)
+    db = ConversationDB(Config.get_conversation_db_path())
     if db.conversation_exists(conversation_id):
         db.delete_conversation(conversation_id)
         print(f"Deleted conversation: {conversation_id}")
@@ -219,7 +215,7 @@ def show_conversation_command(conversation_id: str):
     """Show messages from a specific conversation."""
     from orac.conversation_db import ConversationDB
 
-    db = ConversationDB(Config.CONVERSATION_DB)
+    db = ConversationDB(Config.get_conversation_db_path())
     messages = db.get_messages(conversation_id)
 
     if not messages:

@@ -18,7 +18,7 @@ class TestPromptIntegration:
     """Integration tests for the complete Prompt flow."""
 
     @pytest.mark.integration
-    @patch('orac.prompt.call_api')
+    @patch('orac.client.Client.chat')
     def test_basic_prompt_flow(self, mock_call_api, test_prompts_dir):
         """Test complete flow with basic prompt."""
         mock_call_api.return_value = "Paris"
@@ -38,7 +38,7 @@ class TestPromptIntegration:
                   for msg in message_history)
 
     @pytest.mark.integration
-    @patch('orac.prompt.call_api')
+    @patch('orac.client.Client.chat')
     def test_parameter_type_conversion(self, mock_call_api, temp_dir):
         """Test parameter type conversion and validation."""
         mock_call_api.return_value = "Converted successfully"
@@ -75,7 +75,7 @@ parameters:
         assert "Items: ['x', 'y', 'z']" in prompt_content
 
     @pytest.mark.integration
-    @patch('orac.prompt.call_api')
+    @patch('orac.client.Client.chat')
     def test_json_response_flow(self, mock_call_api, test_prompts_dir):
         """Test JSON response handling flow."""
         mock_response = {
@@ -98,7 +98,7 @@ parameters:
         assert isinstance(result_auto, dict)
 
     @pytest.mark.integration
-    @patch('orac.prompt.call_api')
+    @patch('orac.client.Client.chat')
     def test_file_attachment_flow(self, mock_call_api, temp_dir):
         """Test file attachment and processing flow."""
         mock_call_api.return_value = "File processed successfully"
@@ -131,7 +131,7 @@ files:
         assert str(test_file) in file_paths
 
     @pytest.mark.integration
-    @patch('orac.prompt.call_api')
+    @patch('orac.client.Client.chat')
     def test_parameter_defaults_and_overrides(self, mock_call_api, test_prompts_dir):
         """Test parameter default values and overrides."""
         mock_call_api.return_value = "Parameter test completed"
@@ -155,7 +155,7 @@ files:
         assert "Japan" in override_prompt
 
     @pytest.mark.integration
-    @patch('orac.prompt.call_api')
+    @patch('orac.client.Client.chat')
     def test_configuration_merging(self, mock_call_api, temp_dir):
         """Test configuration merging from YAML and constructor args."""
         mock_call_api.return_value = "Config test completed"
@@ -195,7 +195,7 @@ generation_config:
         assert gen_config.get('max_output_tokens') == 100  # From YAML (not overridden)
 
     @pytest.mark.integration
-    @patch('orac.prompt.call_api')
+    @patch('orac.client.Client.chat')
     def test_error_handling_invalid_json(self, mock_call_api, test_prompts_dir):
         """Test error handling for invalid JSON responses."""
         mock_call_api.return_value = "Not valid JSON response"
@@ -216,7 +216,7 @@ generation_config:
         assert isinstance(result, str)
 
     @pytest.mark.integration
-    @patch('orac.prompt.call_api')
+    @patch('orac.client.Client.chat')
     def test_glob_pattern_file_resolution(self, mock_call_api, temp_dir):
         """Test glob pattern resolution for file parameters."""
         mock_call_api.return_value = "Multiple files processed"
@@ -263,7 +263,7 @@ files:
             prompt.completion()
 
     @pytest.mark.integration
-    @patch('orac.prompt.call_api')
+    @patch('orac.client.Client.chat')
     def test_parameter_info_retrieval(self, mock_call_api, test_prompts_dir):
         """Test parameter information retrieval."""
         prompt = Prompt("capital", prompts_dir=str(test_prompts_dir))
@@ -284,7 +284,7 @@ class TestPromptAdvancedFeatures:
     """Test advanced Prompt features and edge cases."""
 
     @pytest.mark.integration
-    @patch('orac.prompt.call_api')
+    @patch('orac.client.Client.chat')
     def test_template_string_resolution(self, mock_call_api, temp_dir):
         """Test complex template string resolution with nested variables."""
         mock_call_api.return_value = "Template resolved"
@@ -324,7 +324,7 @@ parameters:
         assert "analyze should be done in markdown format" in prompt_content
 
     @pytest.mark.integration
-    @patch('orac.prompt.call_api')
+    @patch('orac.client.Client.chat')
     def test_empty_and_none_parameters(self, mock_call_api, temp_dir):
         """Test handling of empty and None parameter values."""
         mock_call_api.return_value = "Empty params handled"

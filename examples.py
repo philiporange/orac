@@ -16,6 +16,12 @@ This file showcases:
 - Multiple LLM providers
 - Error handling
 - Advanced features
+
+Authentication Pattern:
+- Uses orac.init() to initialize global client with consent
+- Defaults to OpenRouter provider
+- Individual prompts can specify provider in YAML or constructor
+- No longer uses ORAC_LLM_PROVIDER environment variable
 """
 
 import os
@@ -25,13 +31,14 @@ from pathlib import Path
 from typing import Dict, Any, List
 
 # Import Orac components
+import orac
 from orac import Prompt, Flow, Skill, Agent
 from orac.flow import load_flow, FlowSpec
 from orac.skill import load_skill
 from orac.agent import load_agent_spec
 from orac.registry import ToolRegistry
 from orac.config import Config, Provider
-from orac.progress import ProgressTracker, create_simple_callback
+from orac.progress import ProgressTracker, create_simple_callback, ProgressType
 from orac.conversation_db import ConversationDB
 
 
@@ -572,8 +579,8 @@ system_prompt: |
             tools_dir=str(skills_dir)
         )
         
-        # Assuming provider is set
-        provider = Provider(os.getenv("ORAC_LLM_PROVIDER", "google"))
+        # Use openrouter as default provider
+        provider = Provider.OPENROUTER
         
         agent = Agent(agent_spec, registry, provider)
         
@@ -645,37 +652,41 @@ def example_provider_switching():
     # Example with different providers (requires API keys)
     providers_config = {
         Provider.GOOGLE: {
-            "api_key": os.getenv("GOOGLE_API_KEY"),
+            "api_key_env": "GOOGLE_API_KEY",
             "model": "gemini-2.0-flash"
         },
         Provider.OPENAI: {
-            "api_key": os.getenv("OPENAI_API_KEY"),
+            "api_key_env": "OPENAI_API_KEY",
             "model": "gpt-4-turbo"
         },
         Provider.ANTHROPIC: {
-            "api_key": os.getenv("ANTHROPIC_API_KEY"),
+            "api_key_env": "ANTHROPIC_API_KEY",
             "model": "claude-3-sonnet"
         }
     }
     
-    # Test with each provider
+    # Test with each provider by creating separate clients
+    import orac
     for provider, config in providers_config.items():
-        if config["api_key"]:
+        api_key = os.getenv(config["api_key_env"])
+        if api_key:
             print(f"\nTesting with {provider.value}:")
             
-            prompt = Prompt(
-                "capital",
-                provider=provider,
-                api_key=config["api_key"],
-                model_name=config["model"]
-            )
-            
-            # result = prompt(country="Spain")
-            # print(f"{provider.value} says: {result}")
-            
-            print(f"✓ {provider.value} configured successfully")
+            try:
+                # Create a separate client for this provider
+                client = orac.quick_init(provider, api_key=api_key)
+                
+                # Now create prompt with provider specified (uses the global client)
+                prompt = Prompt("capital", provider=provider, model_name=config["model"])
+                
+                # result = prompt(country="Spain")
+                # print(f"{provider.value} says: {result}")
+                
+                print(f"✓ {provider.value} configured successfully")
+            except Exception as e:
+                print(f"✗ {provider.value} - Configuration failed: {e}")
         else:
-            print(f"✗ {provider.value} - No API key found")
+            print(f"✗ {provider.value} - No API key found in {config['api_key_env']}")
 
 
 # ============================================================================
@@ -851,11 +862,21 @@ def main():
     print("ORAC COMPREHENSIVE EXAMPLES")
     print("=" * 60)
     
-    # Check if provider is set
-    if not os.getenv("ORAC_LLM_PROVIDER"):
-        print("\n⚠️  Warning: ORAC_LLM_PROVIDER not set")
-        print("Set it with: export ORAC_LLM_PROVIDER=google")
-        print("Also ensure you have the appropriate API key set")
+    # Initialize Orac with proper auth pattern (defaults to openrouter)
+    try:
+        import orac
+        
+        # Initialize client with consent - defaults to openrouter
+        client = orac.init(
+            interactive=True,
+            default_provider=Provider.OPENROUTER
+        )
+        print(f"✅ Initialized Orac with openrouter provider")
+    except Exception as e:
+        print(f"❌ Failed to initialize Orac: {e}")
+        print("Please ensure:")
+        print("1. You have an API key available (e.g., OPENROUTER_API_KEY)")  
+        print("2. Run 'orac auth login openrouter' if needed")
         return
     
     examples = [

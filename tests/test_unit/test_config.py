@@ -31,17 +31,18 @@ class TestConfig:
     @pytest.mark.unit
     def test_default_model_name(self):
         """Test default model name configuration."""
-        assert isinstance(Config.DEFAULT_MODEL_NAME, str)
-        assert len(Config.DEFAULT_MODEL_NAME) > 0
+        model_name = Config.get_default_model_name()
+        assert isinstance(model_name, str)
+        assert len(model_name) > 0
 
     @pytest.mark.unit
     def test_paths_are_path_objects(self):
         """Test that path configurations are Path objects."""
         assert isinstance(Config.PACKAGE_DIR, Path)
         assert isinstance(Config.PROJECT_ROOT, Path)
-        assert isinstance(Config.DEFAULT_PROMPTS_DIR, Path)
-        assert isinstance(Config.DEFAULT_FLOWS_DIR, Path)
-        assert isinstance(Config.LOG_FILE, Path)
+        assert isinstance(Config.get_prompts_dir(), Path)
+        assert isinstance(Config.get_flows_dir(), Path)
+        assert isinstance(Config.get_log_file_path(), Path)
 
     @pytest.mark.unit
     def test_reserved_client_kwargs(self):
@@ -61,10 +62,10 @@ class TestConfig:
     @pytest.mark.unit
     def test_conversation_settings(self):
         """Test conversation-related configuration."""
-        assert isinstance(Config.CONVERSATION_DB, Path)
-        assert isinstance(Config.DEFAULT_CONVERSATION_MODE, bool)
-        assert isinstance(Config.MAX_CONVERSATION_HISTORY, int)
-        assert Config.MAX_CONVERSATION_HISTORY > 0
+        assert isinstance(Config.get_conversation_db_path(), Path)
+        assert isinstance(Config.get_default_conversation_mode(), bool)
+        assert isinstance(Config.get_max_conversation_history(), int)
+        assert Config.get_max_conversation_history() > 0
 
     @pytest.mark.unit
     def test_provider_enum(self):
@@ -81,16 +82,13 @@ class TestConfig:
         """Test that environment variables override defaults."""
         # Test model name override
         monkeypatch.setenv("ORAC_DEFAULT_MODEL_NAME", "test-model")
-        # Import config again to pick up env var
-        import importlib
-        from orac import config
-        importlib.reload(config)
-        
-        assert config.Config.DEFAULT_MODEL_NAME == "test-model"
+        # Config methods read environment directly, no reload needed
+        assert Config.get_default_model_name() == "test-model"
 
     @pytest.mark.unit 
     def test_download_dir_creation(self):
         """Test that download directory is configured."""
-        assert isinstance(Config.DOWNLOAD_DIR, Path)
+        download_dir = Config.get_download_dir()
+        assert isinstance(download_dir, Path)
         # Should be a valid path (may not exist yet)
-        assert len(str(Config.DOWNLOAD_DIR)) > 0
+        assert len(str(download_dir)) > 0

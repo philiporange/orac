@@ -113,18 +113,28 @@ def execute(inputs):
 
 
 @pytest.fixture(autouse=True)
-def setup_test_env(monkeypatch):
-    """Set up test environment variables."""
-    monkeypatch.setenv("ORAC_LLM_PROVIDER", "google")
+def setup_test_env(request, monkeypatch, test_client):
+    """Set up test environment - disable dotenv and set up global client for tests."""
     monkeypatch.setenv("ORAC_DISABLE_DOTENV", "1")
-    monkeypatch.setenv("GOOGLE_API_KEY", "test_api_key")
+    
+    # Skip setting up mock client for external tests
+    if "external" in request.keywords:
+        yield
+        return
+        
+    # Set up global client for tests
+    import orac
+    original_client = orac._global_client
+    orac._global_client = test_client
+    yield
+    orac._global_client = original_client
 
 
 @pytest.fixture
 def mock_api_response():
     """Mock API response for testing."""
     def _create_mock(content="Test response", json_content=None):
-        with patch('orac.client.call_api') as mock_call:
+        with patch('orac.openai_client.call_api') as mock_call:
             if json_content:
                 mock_call.return_value = json_content
             else:
@@ -146,3 +156,64 @@ def sample_test_files(temp_dir):
     (files_dir / "test.json").write_text('{"key": "value"}')
     
     return files_dir
+
+
+@pytest.fixture
+def test_auth_manager(temp_dir):
+    """Create test AuthManager with temporary consent file."""
+    from orac.auth import AuthManager
+    consent_file = temp_dir / "consent.json"
+    return AuthManager(consent_file)
+
+
+@pytest.fixture
+def test_client(test_auth_manager):
+    """Create test Client with direct API key (no consent needed)."""
+    from orac.client import Client
+    from orac.config import Provider
+    
+    client = Client(test_auth_manager)
+    client.add_provider(Provider.GOOGLE, api_key="test_api_key")
+    return client
+
+
+@pytest.fixture
+def test_client_with_consent(test_auth_manager, monkeypatch):
+    """Create test Client with consented environment access."""
+    from orac.client import Client
+    from orac.config import Provider
+    
+    # Set up test environment variable
+    monkeypatch.setenv("GOOGLE_API_KEY", "test_api_key_from_env")
+    
+    # Grant consent
+    test_auth_manager.grant_consent(Provider.GOOGLE)
+    
+    client = Client(test_auth_manager)
+    client.add_provider(Provider.GOOGLE, allow_env=True, interactive=False)
+    return client
+
+
+@pytest.fixture
+def mock_global_client(test_client):
+    """Mock the global orac client for tests."""
+    import orac
+    original_client = orac._global_client
+    orac._global_client = test_client
+    yield test_client
+    orac._global_client = original_client
+
+
+@pytest.fixture
+def mock_client_completion():
+    """Mock client completion method for testing."""
+    def _create_mock(response="Test response", side_effect=None):
+        mock_client = Mock()
+        if side_effect:
+            mock_client.completion.side_effect = side_effect
+            mock_client.chat.side_effect = side_effect
+        else:
+            mock_client.completion.return_value = response
+            mock_client.chat.return_value = response
+        return mock_client
+    return _create_mock

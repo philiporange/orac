@@ -31,19 +31,16 @@ jobs:
             - name: Run quick unit tests
               run: pytest -m "unit and not slow" -n 2
               env:
-                  ORAC_LLM_PROVIDER: google
                   GOOGLE_API_KEY: fake_test_key
 
             - name: Run all unit tests with coverage
               run: pytest -m unit --cov=orac --cov-report=term-missing -n 2
               env:
-                  ORAC_LLM_PROVIDER: google
                   GOOGLE_API_KEY: fake_test_key
 
             - name: Run integration tests
               run: pytest -m integration -n 2
               env:
-                  ORAC_LLM_PROVIDER: google
                   GOOGLE_API_KEY: fake_test_key
 
             - name: Generate coverage report
@@ -51,7 +48,6 @@ jobs:
               run: |
                   pytest -m unit --cov=orac --cov-report=html --cov-report=xml -n 2
               env:
-                  ORAC_LLM_PROVIDER: google
                   GOOGLE_API_KEY: fake_test_key
 
             - name: Upload coverage to Codecov
@@ -85,5 +81,4 @@ jobs:
                   pytest --collect-only --quiet tests/
                   echo "Test structure validation passed"
               env:
-                  ORAC_LLM_PROVIDER: google
                   GOOGLE_API_KEY: fake_test_key

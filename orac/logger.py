@@ -10,7 +10,7 @@ from orac.config import Config
 logger.remove()
 
 # Add file handler (always active)
-log_file = Config.LOG_FILE
+log_file = Config.get_log_file_path()
 logger.add(
     log_file,
     rotation="10 MB",

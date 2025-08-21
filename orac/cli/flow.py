@@ -57,12 +57,12 @@ def add_common_flow_args(parser):
     """Add common arguments for flow commands."""
     parser.add_argument(
         '--flows-dir',
-        default=Config.DEFAULT_FLOWS_DIR,
+        default=str(Config.get_flows_dir()),
         help='Directory where flow YAML files live'
     )
     parser.add_argument(
         '--prompts-dir',
-        default=Config.DEFAULT_PROMPTS_DIR,
+        default=str(Config.get_prompts_dir()),
         help='Directory where prompt YAML files live'
     )
 
@@ -250,7 +250,7 @@ def show_flow_graph(flows_dir: str, flow_name: str):
     
     try:
         spec = load_flow(flow_path)
-        engine = Flow(spec, prompts_dir=Config.DEFAULT_PROMPTS_DIR)
+        engine = Flow(spec, prompts_dir=str(Config.get_prompts_dir()))
         
         print(f"\nDependency graph for flow '{flow_name}':")
         print("-" * 50)
@@ -275,7 +275,7 @@ def test_flow_command(flows_dir: str, flow_name: str, dry_run=True):
     
     try:
         spec = load_flow(flow_path)
-        engine = Flow(spec, prompts_dir=Config.DEFAULT_PROMPTS_DIR)
+        engine = Flow(spec, prompts_dir=str(Config.get_prompts_dir()))
         
         print(f"\n✓ Flow '{flow_name}' validation successful")
         print(f"Steps: {len(spec.steps)}")

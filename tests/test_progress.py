@@ -324,8 +324,7 @@ class TestCreateSimpleCallback:
         assert "🎉" in captured.out
 
 
-# Integration tests would go here but require actual Prompt setup
-# These would test the progress callbacks in real Prompt and Flow usage
+# Integration tests for progress tracking with real Prompt and Flow usage
 class TestProgressIntegration:
     """Test progress tracking integration with Prompt components."""
     

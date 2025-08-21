@@ -9,6 +9,7 @@ from pathlib import Path
 from orac.config import Config, Provider
 from orac.agent import Agent, load_agent_spec
 from orac.registry import ToolRegistry
+from orac.providers import ProviderRegistry
 from .utils import add_parameter_argument, convert_cli_value
 
 
@@ -21,7 +22,7 @@ def add_agent_parser(subparsers):
     )
     agent_parser.add_argument(
         '--agents-dir',
-        default=Config.DEFAULT_AGENTS_DIR,
+        default=str(Config.get_agents_dir()),
         help='Directory where agent YAML files live'
     )
     
@@ -89,18 +90,25 @@ def execute_agent(args, remaining_args):
              print(f"Error: Missing required argument --{name}", file=sys.stderr)
              sys.exit(1)
 
-    # Setup Provider
-    provider_str = args.provider or os.getenv("ORAC_LLM_PROVIDER")
-    if not provider_str:
-        print("Error: LLM provider not specified. Use --provider or set ORAC_LLM_PROVIDER.", file=sys.stderr)
-        sys.exit(1)
+    # Setup Provider - use agent spec provider if available, otherwise command line or default
+    provider_str = args.provider or spec.provider or "openrouter"
     provider = Provider(provider_str)
     api_key = args.api_key # Can be None, will be picked up from env by client
 
     try:
         # Initialize components
         registry = ToolRegistry()
-        engine = Agent(spec, registry, provider, api_key)
+        provider_registry = ProviderRegistry()
+        
+        # Register the provider with the registry
+        provider_registry.add_provider(
+            provider,
+            api_key=api_key,
+            allow_env=True,
+            interactive=True
+        )
+        
+        engine = Agent(spec, registry, provider_registry, provider)
         
         # Run the agent
         final_result = engine.run(**input_values)

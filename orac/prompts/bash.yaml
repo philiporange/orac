@@ -1,4 +1,5 @@
 description: "Convert natural language descriptions into precise bash commands"
+provider: "google"
 model_name: "gemini-2.5-flash"
 generation_config:
     temperature: 0

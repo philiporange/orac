@@ -53,7 +53,7 @@ def add_common_prompt_args(parser):
     """Add common arguments for prompt commands."""
     parser.add_argument(
         '--prompts-dir',
-        default=Config.DEFAULT_PROMPTS_DIR,
+        default=str(Config.get_prompts_dir()),
         help='Directory where prompt YAML files live'
     )
 
@@ -186,13 +186,11 @@ def execute_prompt(args, remaining_args):
             prompt_name=args.name,
             prompts_dir=args.prompts_dir,
             model_name=args.model_name,
-            api_key=args.api_key,
             generation_config=gen_config or None,
             verbose=args.verbose,
             files=getattr(prompt_args, 'files', None),
             file_urls=getattr(prompt_args, 'file_urls', None),
             provider=args.provider,
-            base_url=getattr(prompt_args, 'base_url', None),
             conversation_id=getattr(prompt_args, 'conversation_id', None),
             auto_save=not getattr(prompt_args, 'no_save', False),
             progress_callback=progress_callback,

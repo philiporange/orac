@@ -1,5 +1,6 @@
 description: "Generate a structured recipe in JSON format for any dish with ingredients and steps"
 model: gemini-2.5-flash-lite
+provider: google
 prompt: |
     Create a simple recipe for ${dish}. Return the recipe in JSON format with the following structure:
     {

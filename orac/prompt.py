@@ -18,8 +18,8 @@ from copy import deepcopy
 from typing import List, Dict, Any, Optional
 from loguru import logger
 
-from orac.client import call_api
-from orac.config import Config, Provider, LLM_PROVIDER
+from orac.config import Config, Provider
+from orac.client import Client
 from orac.conversation_db import ConversationDB
 from orac.progress import ProgressCallback, ProgressEvent, ProgressType
 
@@ -27,12 +27,8 @@ from orac.progress import ProgressCallback, ProgressEvent, ProgressType
 # --------------------------------------------------------------------------- #
 # Constants & helpers                                                         #
 # --------------------------------------------------------------------------- #
-DEFAULT_PROMPTS_DIR = Config.DEFAULT_PROMPTS_DIR
-DEFAULT_CONFIG_FILE = Config.DEFAULT_CONFIG_FILE
-
 _RESERVED_CLIENT_KWARGS = Config.RESERVED_CLIENT_KWARGS
 SUPPORTED_TYPES = Config.SUPPORTED_TYPES
-_DOWNLOAD_DIR = Config.DOWNLOAD_DIR
 
 
 def _deep_merge_dicts(base: dict, extra: dict) -> dict:
@@ -104,7 +100,7 @@ def _download_remote_file(url: str) -> str:
 
     # Build deterministic filename so duplicates are cached
     name = Path(urlparse(url).path).name or "remote_file"
-    target = _DOWNLOAD_DIR / name
+    target = Config.get_download_dir() / name
     if target.exists():
         logger.debug(f"[cache] Re-using downloaded file: {target}")
         return str(target)
@@ -136,16 +132,16 @@ class Prompt:
     def __init__(
         self,
         prompt_name: str,
+        *,
+        client: Optional["Client"] = None,
         prompts_dir: Optional[str] = None,
         base_config_file: Optional[str] = None,
         model_name: Optional[str] = None,
-        api_key: Optional[str] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         verbose: bool = False,
         files: Optional[List[str]] = None,
         file_urls: Optional[List[str]] = None,
         provider: Optional[str | Provider] = None,
-        base_url: Optional[str] = None,
         use_conversation: Optional[bool] = None,
         conversation_id: Optional[str] = None,
         auto_save: bool = True,
@@ -162,7 +158,7 @@ class Prompt:
             self.prompts_root_dir = str(pn_path.parent)
         else:
             self.prompt_name = prompt_name
-            self.prompts_root_dir = prompts_dir or DEFAULT_PROMPTS_DIR
+            self.prompts_root_dir = prompts_dir or str(Config.get_prompts_dir())
             self.yaml_file_path = None  # resolved later
 
         self.verbose = verbose
@@ -176,31 +172,25 @@ class Prompt:
         self._init_auto_save = auto_save
         self._init_max_history = max_history
 
-        # Resolve provider
-        self.provider: Provider | None = None
-        if provider:
-            self.provider = (
-                Provider(provider) if isinstance(provider, str) else provider
-            )
-        elif os.getenv("ORAC_LLM_PROVIDER"):
-            self.provider = Provider(os.getenv("ORAC_LLM_PROVIDER"))
-        elif LLM_PROVIDER:
-            self.provider = LLM_PROVIDER
-
-        if self.provider is None:
-            raise ValueError(
-                "Select an LLM provider first: export "
-                "ORAC_LLM_PROVIDER=openai|google|anthropic|azure|custom "
-                "or pass provider= parameter."
-            )
-
-        logger.debug(
-            f"Initialising Prompt for prompt: {self.prompt_name} "
-            f"(provider: {self.provider.value})"
-        )
+        # Handle client and provider
+        if client is None:
+            # Try to get global client
+            from orac import get_client
+            try:
+                client = get_client()
+            except RuntimeError:
+                raise ValueError(
+                    "No client provided and no global client initialized. "
+                    "Either pass client= parameter or call orac.init() first."
+                )
+        
+        self.client = client
+        
+        # Store runtime provider parameter for later processing
+        self._runtime_provider = provider
 
         # 1. Load base config
-        config_path = base_config_file or DEFAULT_CONFIG_FILE
+        config_path = base_config_file or str(Config.get_config_file())
         base_config = self._load_yaml_file(config_path, silent_not_found=True)
 
         # 2. Load prompt-specific config
@@ -214,6 +204,20 @@ class Prompt:
         # 3. Deep merge
         self.config = _deep_merge_dicts(base_config, prompt_config)
         self._parse_and_validate_config()
+        
+        # 4. Resolve provider (runtime takes precedence over YAML)
+        self.provider: Provider | None = None
+        if self._runtime_provider:
+            self.provider = (
+                Provider(self._runtime_provider) if isinstance(self._runtime_provider, str) else self._runtime_provider
+            )
+        elif self.yaml_provider:
+            self.provider = Provider(self.yaml_provider)
+
+        logger.debug(
+            f"Initialising Prompt for prompt: {self.prompt_name} "
+            f"(provider: {self.provider.value if self.provider else 'default'})"
+        )
 
         # -------------------------- conversation setup ------------------------ #
         # Runtime param takes precedence, then YAML config, then global default
@@ -225,10 +229,10 @@ class Prompt:
             self.use_conversation = True
         else:
             # Use global default
-            self.use_conversation = Config.DEFAULT_CONVERSATION_MODE
+            self.use_conversation = Config.get_default_conversation_mode()
         self.conversation_id = self._init_conversation_id
         self.auto_save = self._init_auto_save
-        self.max_history = self._init_max_history or Config.MAX_CONVERSATION_HISTORY
+        self.max_history = self._init_max_history or Config.get_max_conversation_history()
         self._conversation_db: Optional[ConversationDB] = None
         
         # Initialize conversation if needed
@@ -246,14 +250,11 @@ class Prompt:
                 raise ValueError("Config must contain a top-level 'prompt' string.")
             self.prompt_template_str = self.yaml_prompt
 
-        # -------------------------- client-kwargs -------------------------- #
-        client_kwargs: Dict[str, Any] = {}
+        # -------------------------- client configuration ------------------- #
+        # Store model name preference for later use
+        self.model_name_override = model_name or self.config.get("model_name")
 
-        client_kwargs["model_name"] = model_name or self.config.get("model_name")
-        client_kwargs["api_key"] = api_key or self.config.get("api_key")
-        client_kwargs["base_url"] = base_url or self.config.get("base_url")
-
-        # generation_config
+        # generation_config - store for later use
         base_cfg = deepcopy(self.config.get("generation_config")) or {}
         extra_cfg = deepcopy(generation_config) or {}
 
@@ -262,12 +263,8 @@ class Prompt:
         if self.config.get("response_schema"):
             base_cfg["response_schema"] = self.config.get("response_schema")
 
-        merged_cfg = _merge_generation_config(base_cfg, extra_cfg)
-        if merged_cfg:
-            client_kwargs["generation_config"] = merged_cfg
-
-        # Store: exclude provider to avoid duplicate arg in call_api
-        self.client_kwargs = {k: v for k, v in client_kwargs.items() if v is not None}
+        # Store merged generation config for later use
+        self.merged_generation_config = _merge_generation_config(base_cfg, extra_cfg)
 
     # ------------------------- YAML helpers ------------------------------- #
     def _load_yaml_file(self, path: str | Path, silent_not_found: bool = False) -> dict:
@@ -325,6 +322,11 @@ class Prompt:
         self.parameters_spec = data.get("parameters", [])
         if not isinstance(self.parameters_spec, list):
             raise ValueError("'parameters' must be a list when provided.")
+
+        # provider settings
+        self.yaml_provider = data.get("provider")
+        if self.yaml_provider is not None and not isinstance(self.yaml_provider, str):
+            raise ValueError("'provider' must be a string when provided.")
 
         # validate parameters
         for param in self.parameters_spec:
@@ -439,7 +441,7 @@ class Prompt:
     def _init_conversation(self):
         """Initialize conversation database and ID."""
         if self._conversation_db is None:
-            self._conversation_db = ConversationDB(Config.CONVERSATION_DB)
+            self._conversation_db = ConversationDB(Config.get_conversation_db_path())
         
         if self.conversation_id is None:
             # Try to reuse the most recent conversation for this prompt
@@ -474,6 +476,7 @@ class Prompt:
         api_key: Optional[str] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         file_urls: Optional[List[str]] = None,
+        provider: Optional[str | Provider] = None,
         **kwargs_params,
     ) -> str:
         """
@@ -519,14 +522,16 @@ class Prompt:
                 )
 
             # -------------------- Assemble call-kwargs ----------------------- #
-            call_kwargs = deepcopy(self.client_kwargs)
-
+            call_kwargs = {}
+            
+            # Use provided model_name or instance default
             if model_name is not None:
                 call_kwargs["model_name"] = model_name
-            if api_key is not None:
-                call_kwargs["api_key"] = api_key
+            elif self.model_name_override:
+                call_kwargs["model_name"] = self.model_name_override
 
-            base_cfg = deepcopy(call_kwargs.get("generation_config") or {})
+            # Handle generation config
+            base_cfg = deepcopy(self.merged_generation_config) or {}
             extra_cfg = deepcopy(generation_config) or {}
             merged_cfg = _merge_generation_config(base_cfg, extra_cfg)
             call_kwargs["generation_config"] = _inject_response_format(merged_cfg)
@@ -562,10 +567,15 @@ class Prompt:
                     metadata={"files_count": len(all_files), "message_history_length": len(api_history)}
                 ))
 
-            # Call the client – pass provider **once**
-            result = call_api(
-                provider=self.provider,
+            # Resolve provider (runtime takes precedence)
+            runtime_provider = self.provider
+            if provider is not None:
+                runtime_provider = Provider(provider) if isinstance(provider, str) else provider
+
+            # Call via client
+            result = self.client.chat(
                 message_history=api_history,
+                provider=runtime_provider,
                 file_paths=all_files,
                 system_prompt=system_prompt,
                 **call_kwargs,
@@ -612,6 +622,7 @@ class Prompt:
         api_key: Optional[str] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         file_urls: Optional[List[str]] = None,
+        provider: Optional[str | Provider] = None,
         **kwargs_params,
     ) -> dict:
         """Returns parsed JSON, raises exception if not valid JSON"""
@@ -621,6 +632,7 @@ class Prompt:
             api_key=api_key,
             generation_config=generation_config,
             file_urls=file_urls,
+            provider=provider,
             **kwargs_params,
         )
         return json.loads(result)
@@ -632,6 +644,7 @@ class Prompt:
         api_key: Optional[str] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         file_urls: Optional[List[str]] = None,
+        provider: Optional[str | Provider] = None,
         force_json: bool = False,
         **kwargs_params,
     ) -> str | dict:
@@ -654,6 +667,7 @@ class Prompt:
             api_key=api_key,
             generation_config=generation_config,
             file_urls=file_urls,
+            provider=provider,
             **kwargs_params,
         )
         
@@ -721,7 +735,7 @@ class Prompt:
             List of conversation metadata.
         """
         if not self._conversation_db:
-            self._conversation_db = ConversationDB(Config.CONVERSATION_DB)
+            self._conversation_db = ConversationDB(Config.get_conversation_db_path())
         
         return self._conversation_db.list_conversations()
     
@@ -732,7 +746,7 @@ class Prompt:
             conversation_id: The conversation to delete. Uses current if None.
         """
         if not self._conversation_db:
-            self._conversation_db = ConversationDB(Config.CONVERSATION_DB)
+            self._conversation_db = ConversationDB(Config.get_conversation_db_path())
         
         target_id = conversation_id or self.conversation_id
         if target_id:

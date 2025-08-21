@@ -45,10 +45,9 @@ pip install -e .
 
 ### Setup
 
-1. **Set your LLM provider and API key**:
+1. **Set your API key**:
    ```bash
-   export ORAC_LLM_PROVIDER=google
-   export GOOGLE_API_KEY=your_api_key_here
+   export OPENROUTER_API_KEY=your_api_key_here
    ```
 
 2. **Run your first prompt**:
@@ -206,18 +205,17 @@ Orac supports configuration through environment variables. You can either set th
 
 3. **Or set environment variables directly**:
    ```bash
-   export ORAC_LLM_PROVIDER="google"
-   export GOOGLE_API_KEY="your_api_key_here"
-   export ORAC_DEFAULT_MODEL_NAME="gemini-2.0-flash"
+   export OPENROUTER_API_KEY="your_api_key_here"
+   export ORAC_DEFAULT_MODEL_NAME="meta-llama/llama-3.1-8b-instruct:free"
    ```
 
 ### Choosing an LLM Provider
 
-**Orac requires explicit provider selection**. You must specify which LLM provider to use either via environment variable or CLI flag:
+**Orac defaults to OpenRouter** but supports multiple providers. You can specify which LLM provider to use via CLI flag, YAML configuration, or it defaults to OpenRouter:
 
-| Provider      | `ORAC_LLM_PROVIDER` | API Key Environment Variable | Default Base URL                           |
-| ------------- | ------------------- | --------------------------- | ------------------------------------------ |
-| Google Gemini | `google`            | `GOOGLE_API_KEY`            | `https://generativelanguage.googleapis.com/v1beta/openai/` |
+| Provider      | CLI Flag     | API Key Environment Variable | Default Base URL                           |
+| ------------- | ------------ | --------------------------- | ------------------------------------------ |
+| Google Gemini | `google`     | `GOOGLE_API_KEY`            | `https://generativelanguage.googleapis.com/v1beta/openai/` |
 | OpenAI        | `openai`            | `OPENAI_API_KEY`            | `https://api.openai.com/v1/`               |
 | Anthropic     | `anthropic`         | `ANTHROPIC_API_KEY`         | `https://api.anthropic.com/v1/`            |
 | Azure OpenAI  | `azure`             | `AZURE_OPENAI_KEY`          | `${AZURE_OPENAI_BASE}` (user-set)         |
@@ -226,15 +224,13 @@ Orac supports configuration through environment variables. You can either set th
 
 **Examples:**
 ```bash
-# Using Google Gemini
-export ORAC_LLM_PROVIDER=google
-export GOOGLE_API_KEY=your_google_api_key
+# Using default (OpenRouter) 
+export OPENROUTER_API_KEY=your_openrouter_api_key
 orac prompt run capital --country France
 
-# Using OpenAI
-export ORAC_LLM_PROVIDER=openai
-export OPENAI_API_KEY=your_openai_api_key
-orac prompt run capital --country Spain
+# Using Google Gemini with CLI flag
+export GOOGLE_API_KEY=your_google_api_key
+orac prompt run capital --provider google --country Spain
 
 # Using CLI flags instead of environment variables
 orac prompt run capital --provider google --api-key your_api_key --country Italy
@@ -687,7 +683,25 @@ For enhanced testing with options:
 python run_tests.py --coverage        # Run with coverage
 python run_tests.py --verbose         # Verbose output
 python run_tests.py tests.test_orac   # Run specific module
+python run_tests.py --unit            # Run only unit tests
+python run_tests.py --integration     # Run only integration tests
+python run_tests.py --external        # Run external LLM tests (requires API keys)
 ```
+
+### External LLM Tests
+
+To run tests that make real calls to external LLM services:
+
+```bash
+# Set API key and run external tests
+export GOOGLE_API_KEY=your_api_key_here
+python run_tests.py --external
+
+# Or run specific external test
+pytest tests/test_external_llm.py -m external -v
+```
+
+External tests are skipped by default and require valid API keys to run.
 
 ---
 

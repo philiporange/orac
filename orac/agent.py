@@ -7,7 +7,8 @@ from string import Template
 
 from .config import Config, Provider
 from .registry import ToolRegistry, RegisteredTool
-from .client import call_api
+from .openai_client import call_api
+from .providers import ProviderRegistry
 from .prompt import Prompt, _inject_response_format
 from .flow import Flow, load_flow
 from .skill import Skill, load_skill
@@ -21,15 +22,16 @@ class AgentSpec:
     inputs: List[Dict[str, Any]] = field(default_factory=list)
     tools: List[str] = field(default_factory=list)
     model_name: str = "gemini-2.5-pro"
+    provider: Optional[str] = None
     generation_config: Dict[str, Any] = field(default_factory=dict)
     max_iterations: int = 15
 
 class Agent:
-    def __init__(self, agent_spec: AgentSpec, tool_registry: ToolRegistry, provider: Provider, api_key: Optional[str] = None):
+    def __init__(self, agent_spec: AgentSpec, tool_registry: ToolRegistry, provider_registry: ProviderRegistry, provider: Optional[Provider] = None):
         self.spec = agent_spec
         self.registry = tool_registry
+        self.provider_registry = provider_registry
         self.provider = provider
-        self.api_key = api_key
         self.message_history: List[Dict[str, str]] = []
 
     def run(self, **kwargs) -> str:
@@ -58,8 +60,8 @@ class Agent:
                 # Convert response_mime_type to response_format for OpenAI compatibility
                 processed_config = _inject_response_format(self.spec.generation_config)
                 response_str = call_api(
+                    provider_registry=self.provider_registry,
                     provider=self.provider,
-                    api_key=self.api_key,
                     message_history=self.message_history,
                     system_prompt=system_prompt,
                     model_name=self.spec.model_name,
@@ -97,7 +99,7 @@ class Agent:
             else:
                 try:
                     if tool.type == "prompt":
-                        prompt_instance = Prompt(tool.name, prompts_dir=self.registry.prompts_dir, provider=self.provider.value, api_key=self.api_key)
+                        prompt_instance = Prompt(tool.name, prompts_dir=self.registry.prompts_dir, provider=self.provider.value if self.provider else None)
                         observation = prompt_instance.completion(**tool_inputs)
                     elif tool.type == "flow":
                         flow_spec = load_flow(tool.file_path)

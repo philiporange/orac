@@ -294,9 +294,8 @@ def test_unknown_prompt_error() -> None:
 
 def test_provider_requirement() -> None:
     """The CLI must exit non-zero if no provider is specified."""
-    # Create a clean environment without ORAC_LLM_PROVIDER
+    # Create a clean environment  
     clean_env = os.environ.copy()
-    clean_env.pop("ORAC_LLM_PROVIDER", None)
     clean_env["ORAC_DISABLE_DOTENV"] = "1"  # Disable .env loading
     clean_env["PYTHONPATH"] = str(Path(__file__).parent)
 
@@ -753,8 +752,7 @@ def main() -> None:
     print("🧪  Orac full-functionality tests")
     print("=" * 40)
 
-    # Set up provider for testing
-    os.environ["ORAC_LLM_PROVIDER"] = "google"
+    # Check if API key is available for testing
     if not os.environ.get("GOOGLE_API_KEY"):
         print("⚠️  Warning: GOOGLE_API_KEY not set - tests may fail")
 
@@ -765,8 +763,7 @@ def main() -> None:
         # Run the provider requirement test first (without provider set)
         test_provider_requirement()
 
-        # Then set up provider for remaining tests
-        os.environ["ORAC_LLM_PROVIDER"] = "google"
+        # Check for API key for remaining tests
         if not os.environ.get("GOOGLE_API_KEY"):
             print("⚠️  Warning: GOOGLE_API_KEY not set - tests may fail")
 

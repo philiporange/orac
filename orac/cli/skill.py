@@ -53,7 +53,7 @@ def add_common_skill_args(parser):
     """Add common arguments for skill commands."""
     parser.add_argument(
         '--skills-dir',
-        default=Config.DEFAULT_SKILLS_DIR,
+        default=str(Config.get_skills_dir()),
         help='Directory where skill YAML files live'
     )
 

@@ -37,7 +37,7 @@ class TestPromptProgressIntegrationUnit:
         assert prompt.progress_callback is None
     
     @pytest.mark.unit
-    @patch('orac.prompt.call_api')
+    @patch('orac.client.Client.chat')
     def test_prompt_progress_events_emitted(self, mock_call_api, test_prompts_dir):
         """Test that Prompt emits progress events during completion."""
         mock_call_api.return_value = "Test response"
@@ -82,7 +82,7 @@ class TestPromptProgressIntegrationUnit:
         assert complete_event.metadata["prompt_name"] == "test_prompt"
     
     @pytest.mark.unit
-    @patch('orac.prompt.call_api')
+    @patch('orac.client.Client.chat')
     def test_prompt_progress_error_handling(self, mock_call_api, test_prompts_dir):
         """Test that Prompt emits error events when completion fails."""
         mock_call_api.side_effect = RuntimeError("API failed")
@@ -110,7 +110,7 @@ class TestPromptProgressIntegrationUnit:
         assert error_event.metadata["error_type"] == "RuntimeError"
     
     @pytest.mark.unit
-    @patch('orac.prompt.call_api')
+    @patch('orac.client.Client.chat')
     def test_prompt_no_progress_callback_works_normally(self, mock_call_api, test_prompts_dir):
         """Test that Prompt works normally without progress callback."""
         mock_call_api.return_value = "Test response"
@@ -124,7 +124,7 @@ class TestPromptProgressIntegrationUnit:
         # No exceptions should be raised
     
     @pytest.mark.unit
-    @patch('orac.prompt.call_api')
+    @patch('orac.client.Client.chat')
     def test_prompt_progress_metadata_includes_parameters(self, mock_call_api, test_prompts_dir):
         """Test that progress events include parameter metadata."""
         mock_call_api.return_value = "Test response"

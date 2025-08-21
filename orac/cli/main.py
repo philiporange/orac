@@ -8,6 +8,9 @@ from pathlib import Path
 
 from orac.logger import configure_console_logging
 from orac.config import Config
+from orac.auth import AuthManager
+from orac.client import Client
+import orac
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -27,6 +30,108 @@ if not os.getenv("ORAC_DISABLE_DOTENV"):
     load_dotenv(Config.PROJECT_ROOT / ".env", override=False)
     # 3. User's home directory
     load_dotenv(Path.home() / ".env", override=False)
+
+
+def needs_api_access(args):
+    """Check if command needs API access."""
+    # Commands that require LLM API access
+    api_commands = {
+        'prompt': ['run'],
+        'flow': ['run'], 
+        'agent': ['run'],
+        'chat': ['send', 'interactive']
+    }
+    
+    if args.resource in api_commands:
+        return hasattr(args, 'action') and args.action in api_commands[args.resource]
+    
+    return False
+
+
+def ensure_client_initialized(interactive: bool = True):
+    """Ensure client is initialized with proper consent."""
+    # Check if global client is already initialized
+    if orac.is_initialized():
+        return orac.get_client()
+    
+    auth_manager = AuthManager()
+    
+    # Check if we have any consented providers
+    consented_providers = auth_manager.get_consented_providers()
+    
+    if not consented_providers:
+        if interactive:
+            print("🔐 Orac needs to access LLM providers to function.")
+            print("This requires one-time consent to read API keys from environment variables.")
+            print()
+            return interactive_provider_setup()
+        else:
+            raise RuntimeError(
+                "No consented providers found. Run 'orac auth init' first, "
+                "or use 'orac auth login <provider> --allow-env' to grant consent."
+            )
+    
+    # Use existing consent to initialize client
+    client = Client(auth_manager)
+    try:
+        # Try to add providers that have consent
+        for provider in consented_providers:
+            try:
+                client.add_provider(provider, from_config=True)
+            except Exception as e:
+                # Skip providers that can't be initialized (missing API keys, etc.)
+                continue
+        
+        if client.is_initialized():
+            # Set global client
+            orac._global_client = client
+            return client
+        else:
+            raise RuntimeError("No providers could be initialized with current consent")
+            
+    except Exception as e:
+        if interactive:
+            print(f"⚠️  Could not initialize with existing consent: {e}")
+            print("Let's set up authentication interactively...")
+            return interactive_provider_setup()
+        else:
+            raise
+
+
+def interactive_provider_setup():
+    """Interactive provider setup with consent."""
+    print("Available providers:")
+    print("  • openrouter (recommended - access to multiple models)")
+    print("  • openai, google, anthropic, azure")
+    print()
+    
+    # Recommend OpenRouter for multi-provider access
+    default_provider = input("Which provider would you like to use? [openrouter]: ").strip().lower()
+    if not default_provider:
+        default_provider = "openrouter"
+    
+    try:
+        from orac.config import Provider
+        provider = Provider(default_provider)
+    except ValueError:
+        print(f"Unknown provider: {default_provider}")
+        print("Falling back to openrouter...")
+        provider = Provider.OPENROUTER
+    
+    try:
+        # Initialize using orac.init() which handles consent
+        client = orac.init(
+            interactive=True,
+            default_provider=provider
+        )
+        print(f"✅ Successfully initialized with {provider.value}")
+        return client
+        
+    except Exception as e:
+        print(f"❌ Failed to initialize: {e}")
+        print("\n💡 You can also try:")
+        print(f"   orac auth login {provider.value} --allow-env")
+        sys.exit(1)
 
 
 def main():
@@ -94,6 +199,14 @@ def main():
     
     # Configure logging
     configure_console_logging(verbose=args.verbose)
+    
+    # Initialize client for commands that need API access
+    if needs_api_access(args):
+        try:
+            client = ensure_client_initialized(interactive=True)
+        except Exception as e:
+            print(f"❌ Failed to initialize client: {e}", file=sys.stderr)
+            sys.exit(1)
     
     # Route to appropriate handler
     if args.resource == 'prompt':
@@ -198,11 +311,11 @@ def list_all_command():
     
     # List prompts
     print("\nPROMPTS:")
-    list_prompts_command(Config.DEFAULT_PROMPTS_DIR)
+    list_prompts_command(str(Config.get_prompts_dir()))
     
     # List flows
     print("\nFLOWS:")
-    list_flows_command(Config.DEFAULT_FLOWS_DIR)
+    list_flows_command(str(Config.get_flows_dir()))
 
 
 def list_prompts_command(prompts_dir: str):
@@ -268,7 +381,7 @@ def search_command(keyword: str):
     found_any = False
     
     # Search prompts
-    prompts_path = Path(Config.DEFAULT_PROMPTS_DIR)
+    prompts_path = Config.get_prompts_dir()
     if prompts_path.exists():
         yaml_files = list(prompts_path.glob('*.yaml')) + list(prompts_path.glob('*.yml'))
         
@@ -276,7 +389,7 @@ def search_command(keyword: str):
         for yaml_file in yaml_files:
             name = yaml_file.stem
             try:
-                spec = load_prompt_spec(Config.DEFAULT_PROMPTS_DIR, name)
+                spec = load_prompt_spec(str(Config.get_prompts_dir()), name)
                 # Search in name, description, and prompt text
                 search_text = f"{name} {spec.get('description', '')} {spec.get('prompt', '')}".lower()
                 if keyword.lower() in search_text:
@@ -292,9 +405,9 @@ def search_command(keyword: str):
             found_any = True
     
     # Search flows
-    flows_path = Path(Config.DEFAULT_FLOWS_DIR)
+    flows_path = Config.get_flows_dir()
     if flows_path.exists():
-        flows = list_flows(Config.DEFAULT_FLOWS_DIR)
+        flows = list_flows(str(Config.get_flows_dir()))
         
         matching_flows = []
         for flow in flows:

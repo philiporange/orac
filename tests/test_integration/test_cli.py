@@ -21,7 +21,7 @@ class TestCLI:
     """Tests for core CLI functionality."""
 
     @pytest.mark.integration
-    @patch('orac.prompt.call_api')
+    @patch('orac.client.Client.chat')
     def test_basic_prompt_execution(self, mock_call_api, test_prompts_dir, monkeypatch, capsys):
         """Test basic prompt execution via CLI."""
         mock_call_api.return_value = "Paris"
@@ -38,7 +38,7 @@ class TestCLI:
         assert "Paris" in captured.out
 
     @pytest.mark.integration
-    @patch('orac.prompt.call_api')
+    @patch('orac.client.Client.chat')
     def test_prompt_with_parameters(self, mock_call_api, test_prompts_dir, monkeypatch, capsys):
         """Test prompt execution with custom parameters."""
         mock_call_api.return_value = "Tokyo"
@@ -65,7 +65,7 @@ class TestCLI:
         assert "Parameters" in captured.out or "country" in captured.out
 
     @pytest.mark.integration
-    @patch('orac.prompt.call_api')
+    @patch('orac.client.Client.chat')
     def test_json_response_handling(self, mock_call_api, test_prompts_dir, monkeypatch, capsys):
         """Test CLI handling of JSON responses."""
         mock_response = {"title": "Pasta Recipe", "time": "20 minutes"}
@@ -101,9 +101,6 @@ class TestCLI:
     def test_verbose_mode(self, test_prompts_dir, monkeypatch, capsys):
         """Test verbose output mode via console logging.""" 
         
-        # Set prompts dir via monkeypatch to work around CLI argument parsing issues
-        monkeypatch.setattr('orac.config.Config.DEFAULT_PROMPTS_DIR', str(test_prompts_dir))
-        
         # Test that verbose logging configuration works with loguru
         from orac.logger import configure_console_logging, logger
         
@@ -128,7 +125,7 @@ class TestCLIErrorHandling:
         """Test that missing API key fails gracefully."""
         # Remove API key environment variable
         monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
-        monkeypatch.delenv("ORAC_LLM_PROVIDER", raising=False)
+        # Environment cleaned for test
         
         args = ["orac", "capital", "--prompts-dir", str(test_prompts_dir)]
         monkeypatch.setattr(sys, 'argv', args)

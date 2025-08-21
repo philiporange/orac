@@ -18,13 +18,13 @@ class ToolRegistry:
 
     def __init__(
         self,
-        prompts_dir: str = Config.DEFAULT_PROMPTS_DIR,
-        flows_dir: str = Config.DEFAULT_FLOWS_DIR,
-        tools_dir: str = Config.DEFAULT_SKILLS_DIR,
+        prompts_dir: Optional[str] = None,
+        flows_dir: Optional[str] = None,
+        tools_dir: Optional[str] = None,
     ):
-        self.prompts_dir = Path(prompts_dir)
-        self.flows_dir = Path(flows_dir)
-        self.tools_dir = Path(tools_dir)
+        self.prompts_dir = Path(prompts_dir) if prompts_dir else Config.get_prompts_dir()
+        self.flows_dir = Path(flows_dir) if flows_dir else Config.get_flows_dir()
+        self.tools_dir = Path(tools_dir) if tools_dir else Config.get_skills_dir()
         self.tools: Dict[str, RegisteredTool] = {}
         self._load_all()
 
