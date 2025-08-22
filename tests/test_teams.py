@@ -9,8 +9,6 @@ from unittest.mock import Mock, patch
 from orac.team import Team, TeamSpec, TeamLeaderAgent, load_team_spec
 from orac.agent import AgentSpec
 from orac.registry import ToolRegistry
-from orac.config import Provider, Config
-from orac.providers import ProviderRegistry
 
 
 @pytest.fixture
@@ -149,33 +147,24 @@ class TestTeam:
     def test_team_initialization(self, sample_team_spec, sample_agents, temp_dirs):
         """Test Team can be initialized properly."""
         registry = ToolRegistry()
-        provider_registry = ProviderRegistry()
-        provider = Provider.OPENROUTER
         
         team = Team(
             team_spec=sample_team_spec,
             registry=registry,
-            provider_registry=provider_registry,
-            provider=provider,
             agents_dir=temp_dirs['agents']
         )
         
         assert team.spec == sample_team_spec
         assert team.registry == registry
-        assert team.provider == provider
         assert team.agents_dir == Path(temp_dirs['agents'])
     
     def test_load_agent_spec(self, sample_team_spec, sample_agents, temp_dirs):
         """Test loading agent specifications."""
         registry = ToolRegistry()
-        provider_registry = ProviderRegistry()
-        provider = Provider.OPENROUTER
         
         team = Team(
             team_spec=sample_team_spec,
             registry=registry,
-            provider_registry=provider_registry,
-            provider=provider,
             agents_dir=temp_dirs['agents']
         )
         
@@ -193,14 +182,10 @@ class TestTeam:
     def test_create_team_registry(self, sample_team_spec, sample_agents, temp_dirs):
         """Test creation of team registry with agent tools."""
         registry = ToolRegistry()
-        provider_registry = ProviderRegistry()
-        provider = Provider.OPENROUTER
         
         team = Team(
             team_spec=sample_team_spec,
             registry=registry,
-            provider_registry=provider_registry,
-            provider=provider,
             agents_dir=temp_dirs['agents']
         )
         
@@ -220,135 +205,6 @@ class TestTeam:
         assert delegate_tool.name == "delegate"
         assert delegate_tool.type == "tool"
         assert len(delegate_tool.inputs) == 3  # agent, task, inputs
-
-
-class TestTeamLeaderAgent:
-    """Test TeamLeaderAgent functionality."""
-    
-    @pytest.fixture
-    def mock_agent_spec(self):
-        """Mock agent specification."""
-        return AgentSpec(
-            name="Test Leader",
-            description="Test leader",
-            system_prompt="Test prompt",
-            inputs=[{"name": "topic", "type": "string"}],
-            tools=["tool:delegate", "tool:finish"],
-            max_iterations=10
-        )
-    
-    @pytest.fixture
-    def mock_team_members(self):
-        """Mock team member specs."""
-        return {
-            "agent1": AgentSpec(
-                name="Agent 1",
-                description="First agent",
-                system_prompt="Agent 1 prompt",
-                inputs=[{"name": "task", "type": "string"}],
-                tools=["tool:finish"],
-                max_iterations=5
-            ),
-            "agent2": AgentSpec(
-                name="Agent 2", 
-                description="Second agent",
-                system_prompt="Agent 2 prompt",
-                inputs=[{"name": "task", "type": "string"}],
-                tools=["tool:finish"],
-                max_iterations=5
-            )
-        }
-    
-    def test_team_leader_initialization(self, mock_agent_spec, mock_team_members):
-        """Test TeamLeaderAgent initialization."""
-        registry = ToolRegistry()
-        provider_registry = ProviderRegistry()
-        provider = Provider.OPENROUTER
-        constitution = "Test rules"
-        
-        leader = TeamLeaderAgent(
-            agent_spec=mock_agent_spec,
-            tool_registry=registry,
-            provider_registry=provider_registry,
-            provider=provider,
-            team_members=mock_team_members,
-            constitution=constitution
-        )
-        
-        assert leader.team_members == mock_team_members
-        assert leader.constitution == constitution
-    
-    @patch('orac.team.Agent')
-    def test_delegate_task(self, mock_agent_class, mock_agent_spec, mock_team_members):
-        """Test task delegation functionality."""
-        registry = ToolRegistry()
-        provider_registry = ProviderRegistry()
-        provider = Provider.OPENROUTER
-        
-        # Mock agent instance and return value
-        mock_agent_instance = Mock()
-        mock_agent_instance.run.return_value = "Task completed"
-        mock_agent_class.return_value = mock_agent_instance
-        
-        leader = TeamLeaderAgent(
-            agent_spec=mock_agent_spec,
-            tool_registry=registry,
-            provider_registry=provider_registry,
-            provider=provider,
-            team_members=mock_team_members
-        )
-        
-        # Test successful delegation
-        result = leader._delegate_task("agent1", "Test task", {"param": "value"})
-        
-        assert result == "Task completed"
-        mock_agent_class.assert_called_once()
-        mock_agent_instance.run.assert_called_once_with(
-            task="Test task", param="value"
-        )
-    
-    def test_delegate_task_unknown_agent(self, mock_agent_spec, mock_team_members):
-        """Test delegation to unknown agent."""
-        registry = ToolRegistry()
-        provider_registry = ProviderRegistry()
-        provider = Provider.OPENROUTER
-        
-        leader = TeamLeaderAgent(
-            agent_spec=mock_agent_spec,
-            tool_registry=registry,
-            provider_registry=provider_registry,
-            provider=provider,
-            team_members=mock_team_members
-        )
-        
-        result = leader._delegate_task("unknown_agent", "Test task", {})
-        assert "Error: Agent 'unknown_agent' not found in team" in result
-    
-    @patch('orac.team.Agent')
-    def test_execute_agent_direct(self, mock_agent_class, mock_agent_spec, mock_team_members):
-        """Test direct agent execution."""
-        registry = ToolRegistry()
-        provider_registry = ProviderRegistry()
-        provider = Provider.OPENROUTER
-        
-        # Mock agent instance and return value
-        mock_agent_instance = Mock()
-        mock_agent_instance.run.return_value = "Agent result"
-        mock_agent_class.return_value = mock_agent_instance
-        
-        leader = TeamLeaderAgent(
-            agent_spec=mock_agent_spec,
-            tool_registry=registry,
-            provider_registry=provider_registry,
-            provider=provider,
-            team_members=mock_team_members
-        )
-        
-        # Test direct agent execution
-        result = leader._execute_agent("agent1", {"param": "value"})
-        
-        assert result == "Agent result"
-        mock_agent_instance.run.assert_called_once_with(param="value")
 
 
 class TestLoadTeamSpec:
@@ -394,8 +250,6 @@ class TestTeamIntegration:
     def test_team_run(self, mock_leader_class, sample_team_spec, sample_agents, temp_dirs):
         """Test complete team execution."""
         registry = ToolRegistry()
-        provider_registry = ProviderRegistry()
-        provider = Provider.OPENROUTER
         
         # Mock leader instance and return value
         mock_leader_instance = Mock()
@@ -405,8 +259,6 @@ class TestTeamIntegration:
         team = Team(
             team_spec=sample_team_spec,
             registry=registry,
-            provider_registry=provider_registry,
-            provider=provider,
             agents_dir=temp_dirs['agents']
         )
         

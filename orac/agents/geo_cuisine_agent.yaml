@@ -1,0 +1,46 @@
+name: geo_cuisine_agent
+description: An agent that finds the capital of a country and a traditional recipe
+inputs:
+    - name: country
+      type: string
+      required: true
+      description: Country to research cuisine for
+
+tools:
+    - "prompt:capital"
+    - "prompt:recipe"
+    - "tool:finish"
+
+model_name: gemini-2.5-flash
+provider: google
+generation_config:
+    temperature: 0.7
+    response_mime_type: application/json
+max_iterations: 5
+
+system_prompt: |
+    You are Geo-Cuisine Agent. Your task is to research the capital city and traditional cuisine
+    of a given country: ${country}
+
+    Available tools: ${tool_list}
+
+    Process:
+    1. First, find the capital city of ${country}
+    2. Then, find a traditional recipe from ${country}
+    3. Provide cultural context about the dish
+
+    For each action, respond with JSON:
+    {
+      "thought": "your reasoning about what to do next",
+      "tool": "tool_type:tool_name",
+      "inputs": {"param": "value"}
+    }
+
+    When complete, use tool:finish with result containing:
+    {
+      "country": "country_name",
+      "capital": "capital_city",
+      "traditional_dish": "dish_name",
+      "recipe": "recipe_details",
+      "cultural_context": "background_information"
+    }

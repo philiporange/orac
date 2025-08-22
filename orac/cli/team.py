@@ -98,15 +98,11 @@ def execute_team(args, remaining_args):
                 print(f"Error: Missing required argument --{name}", file=sys.stderr)
                 sys.exit(1)
 
-        # Setup provider and run team
-        provider = Provider(args.provider or "openrouter")
+        # Setup team without provider - agents handle their own providers
         registry = ToolRegistry()
-        provider_registry = ProviderRegistry()
         team = Team(
             team_spec=spec,
             registry=registry,
-            provider_registry=provider_registry,
-            provider=provider,
             agents_dir=args.agents_dir
         )
 

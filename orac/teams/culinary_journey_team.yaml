@@ -1,0 +1,36 @@
+name: culinary_journey_team
+description: Plans a multi-course meal inspired by a journey across three contiguous countries
+leader: journey_coordinator
+agents:
+  - country_selector
+  - geo_cuisine_agent
+  - report_writer
+
+inputs:
+  - name: region
+    type: string
+    required: true
+    description: Geographic region for the journey (e.g., "Europe", "Mediterranean")
+  - name: meal_type
+    type: string
+    default: "dinner"
+    description: Type of meal to plan (dinner, lunch, tasting menu)
+  - name: preferences
+    type: string
+    default: "traditional dishes"
+    description: Culinary preferences or dietary requirements
+
+outputs:
+  - name: menu
+    description: Complete menu with dishes from the three-country journey
+  - name: journey_narrative
+    description: Story of the culinary journey
+
+constitution: |
+  Culinary Journey Team Guidelines:
+  - The journey must flow naturally between contiguous countries
+  - Each course should authentically represent its country of origin
+  - The overall menu should be cohesive despite crossing borders
+  - Include cultural context and storytelling in the presentation
+  - Balance flavors and textures across the entire meal
+  - Consider seasonal ingredients and regional specialties

@@ -5,6 +5,7 @@
 
 # Default model for all prompts unless specified otherwise.
 model_name: "gemini-2.5-flash-lite"
+provider: google
 
 # Default generation parameters.
 generation_config:

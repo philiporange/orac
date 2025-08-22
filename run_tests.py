@@ -60,7 +60,7 @@ Examples:
     if args.coverage or args.html_coverage:
         cmd.extend(["--cov=orac", "--cov-report=term-missing"])
         if args.html_coverage:
-            cmd.extend(["--cov-report=html"])
+            cmd.extend(["--cov-report=html:/tmp/orac-htmlcov"])
 
     # Output options
     if args.verbose:
@@ -106,7 +106,7 @@ Examples:
         if args.coverage or args.html_coverage:
             print("📊 Coverage report generated")
             if args.html_coverage:
-                print("📁 HTML coverage report: htmlcov/index.html")
+                print("📁 HTML coverage report: /tmp/orac-htmlcov/index.html")
     else:
         print("\n" + "=" * 50)
         print("❌ Some tests failed")

@@ -1,0 +1,49 @@
+name: country_selector
+description: Selects three contiguous countries for a culinary journey
+inputs:
+    - name: region
+      type: string
+      required: true
+      description: Geographic region to focus on (e.g., "Europe", "Asia", "Americas")
+    - name: preferences
+      type: string
+      required: false
+      default: "diverse cuisines"
+      description: Preferences for country selection
+
+tools:
+    - "prompt:capital" # To verify countries exist
+    - "tool:finish"
+
+model_name: gemini-2.5-flash
+provider: google
+generation_config:
+    temperature: 0.7
+    response_mime_type: application/json
+max_iterations: 5
+
+system_prompt: |
+    You are a geography expert tasked with selecting three contiguous countries for a culinary journey.
+    Region: ${region}
+    Preferences: ${preferences}
+
+    You have access to these tools:
+    ${tool_list}
+
+    Your goal:
+    1. Select three countries that share borders (forming a continuous path)
+    2. Consider culinary diversity and interest
+    3. Verify each country exists by checking its capital
+    4. Return the three countries in journey order
+
+    Think about geographic connections and culinary traditions.
+
+    Respond with JSON:
+    {
+      "thought": "your reasoning",
+      "tool": "tool_type:tool_name",
+      "inputs": {"param": "value"}
+    }
+
+    When done, use tool:finish with result as a JSON string containing:
+    {"countries": ["Country1", "Country2", "Country3"], "route_description": "brief description"}

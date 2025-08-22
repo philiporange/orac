@@ -33,12 +33,9 @@ class Team:
     """Manages a team of agents with a leader orchestrating subagents."""
 
     def __init__(self, team_spec: TeamSpec, registry: ToolRegistry,
-                 provider_registry: ProviderRegistry, provider: Optional[Provider] = None,
                  agents_dir: str = None):
         self.spec = team_spec
         self.registry = registry
-        self.provider_registry = provider_registry
-        self.provider = provider
         self.agents_dir = Path(agents_dir or "orac/agents")
 
         # Load agent specifications
@@ -97,10 +94,9 @@ class Team:
         leader_agent = TeamLeaderAgent(
             agent_spec=self.leader_spec,
             tool_registry=self.team_registry,
-            provider_registry=self.provider_registry,
-            provider=self.provider,
             team_members=self.agent_specs,
-            constitution=self.spec.constitution
+            constitution=self.spec.constitution,
+            agents_dir=self.agents_dir
         )
 
         return leader_agent.run(**kwargs)
@@ -110,12 +106,25 @@ class TeamLeaderAgent(Agent):
     """Leader agent with delegation capabilities."""
 
     def __init__(self, agent_spec: AgentSpec, tool_registry: ToolRegistry,
-                 provider_registry, provider: Optional[Provider] = None,
                  team_members: Dict[str, AgentSpec] = None,
-                 constitution: Optional[str] = None):
-        super().__init__(agent_spec, tool_registry, provider_registry, provider)
+                 constitution: Optional[str] = None,
+                 agents_dir: Path = None):
+        # Setup provider for the leader agent
+        from .providers import ProviderRegistry
+        leader_provider_registry = ProviderRegistry()
+        provider_str = agent_spec.provider or "google"
+        provider = Provider(provider_str)
+        
+        leader_provider_registry.add_provider(
+            provider,
+            allow_env=True,
+            interactive=False
+        )
+        
+        super().__init__(agent_spec, tool_registry, leader_provider_registry, provider)
         self.team_members = team_members or {}
         self.constitution = constitution
+        self.agents_dir = agents_dir
 
     def _execute_tool(self, tool_name: str, tool_inputs: Dict[str, Any]) -> str:
         """Override to handle team delegation."""
@@ -138,13 +147,26 @@ class TeamLeaderAgent(Agent):
         if agent_name not in self.team_members:
             return f"Error: Agent '{agent_name}' not found in team"
 
-        # Create agent instance
+        # Create agent instance with its own provider setup
         agent_spec = self.team_members[agent_name]
+        
+        # Setup provider for this agent
+        from .providers import ProviderRegistry
+        agent_provider_registry = ProviderRegistry()
+        provider_str = agent_spec.provider or "google"
+        provider = Provider(provider_str)
+        
+        agent_provider_registry.add_provider(
+            provider,
+            allow_env=True,
+            interactive=False  # Non-interactive for delegation
+        )
+        
         agent = Agent(
             agent_spec=agent_spec,
             tool_registry=self.registry,
-            provider_registry=self.provider_registry,
-            provider=self.provider
+            provider_registry=agent_provider_registry,
+            provider=provider
         )
 
         # Execute with task and inputs
@@ -156,12 +178,26 @@ class TeamLeaderAgent(Agent):
         if agent_name not in self.team_members:
             return f"Error: Agent '{agent_name}' not found in team"
 
+        # Create agent instance with its own provider setup
         agent_spec = self.team_members[agent_name]
+        
+        # Setup provider for this agent
+        from .providers import ProviderRegistry
+        agent_provider_registry = ProviderRegistry()
+        provider_str = agent_spec.provider or "google"
+        provider = Provider(provider_str)
+        
+        agent_provider_registry.add_provider(
+            provider,
+            allow_env=True,
+            interactive=False  # Non-interactive for delegation
+        )
+        
         agent = Agent(
             agent_spec=agent_spec,
             tool_registry=self.registry,
-            provider_registry=self.provider_registry,
-            provider=self.provider
+            provider_registry=agent_provider_registry,
+            provider=provider
         )
 
         return agent.run(**inputs)

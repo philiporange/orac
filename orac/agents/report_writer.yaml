@@ -35,6 +35,7 @@ tools:
   - tool:finish
 
 model_name: "gemini-2.5-flash"
+provider: google
 generation_config:
   temperature: 0.3
 

@@ -90,3 +90,166 @@ def test_recipe_prompt_callable_interface(external_client):
     # Check content is relevant
     title_lower = result["title"].lower()
     assert "banana" in title_lower or "bread" in title_lower
+
+
+# Team tests that require external authentication
+import tempfile
+import shutil
+from pathlib import Path
+from unittest.mock import Mock, patch
+from orac.team import Team, TeamSpec, TeamLeaderAgent
+from orac.agent import AgentSpec
+from orac.registry import ToolRegistry
+
+
+@pytest.fixture
+def temp_dirs():
+    """Create temporary directories for testing."""
+    base_temp = tempfile.mkdtemp()
+    teams_dir = Path(base_temp) / "teams"
+    agents_dir = Path(base_temp) / "agents"
+    teams_dir.mkdir()
+    agents_dir.mkdir()
+    
+    yield {
+        'base': base_temp,
+        'teams': str(teams_dir),
+        'agents': str(agents_dir)
+    }
+    
+    shutil.rmtree(base_temp)
+
+
+@pytest.fixture
+def mock_agent_spec():
+    """Mock agent specification."""
+    return AgentSpec(
+        name="Test Leader",
+        description="Test leader",
+        system_prompt="Test prompt",
+        inputs=[{"name": "topic", "type": "string"}],
+        tools=["tool:delegate", "tool:finish"],
+        max_iterations=10
+    )
+
+
+@pytest.fixture
+def mock_team_members():
+    """Mock team member specs."""
+    return {
+        "agent1": AgentSpec(
+            name="Agent 1",
+            description="First agent",
+            system_prompt="Agent 1 prompt",
+            inputs=[{"name": "task", "type": "string"}],
+            tools=["tool:finish"],
+            max_iterations=5
+        ),
+        "agent2": AgentSpec(
+            name="Agent 2", 
+            description="Second agent",
+            system_prompt="Agent 2 prompt",
+            inputs=[{"name": "task", "type": "string"}],
+            tools=["tool:finish"],
+            max_iterations=5
+        )
+    }
+
+
+@pytest.mark.external
+@pytest.mark.skipif(
+    not os.environ.get("GOOGLE_API_KEY"), 
+    reason="GOOGLE_API_KEY not set - external team test requires API key"
+)
+def test_team_leader_initialization(mock_agent_spec, mock_team_members):
+    """Test TeamLeaderAgent initialization."""
+    registry = ToolRegistry()
+    constitution = "Test rules"
+    
+    leader = TeamLeaderAgent(
+        agent_spec=mock_agent_spec,
+        tool_registry=registry,
+        team_members=mock_team_members,
+        constitution=constitution
+    )
+    
+    assert leader.team_members == mock_team_members
+    assert leader.constitution == constitution
+
+
+@pytest.mark.external
+@pytest.mark.skipif(
+    not os.environ.get("GOOGLE_API_KEY"), 
+    reason="GOOGLE_API_KEY not set - external team test requires API key"
+)
+@patch('orac.team.Agent')
+def test_delegate_task(mock_agent_class, mock_agent_spec, mock_team_members):
+    """Test task delegation functionality."""
+    registry = ToolRegistry()
+    
+    # Mock agent instance and return value
+    mock_agent_instance = Mock()
+    mock_agent_instance.run.return_value = "Task completed"
+    mock_agent_class.return_value = mock_agent_instance
+    
+    leader = TeamLeaderAgent(
+        agent_spec=mock_agent_spec,
+        tool_registry=registry,
+        team_members=mock_team_members
+    )
+    
+    # Test successful delegation
+    result = leader._delegate_task("agent1", "Test task", {"param": "value"})
+    
+    assert result == "Task completed"
+    mock_agent_class.assert_called_once()
+    mock_agent_instance.run.assert_called_once_with(
+        task="Test task", param="value"
+    )
+
+
+@pytest.mark.external
+@pytest.mark.skipif(
+    not os.environ.get("GOOGLE_API_KEY"), 
+    reason="GOOGLE_API_KEY not set - external team test requires API key"
+)
+def test_delegate_task_unknown_agent(mock_agent_spec, mock_team_members):
+    """Test delegation to unknown agent."""
+    registry = ToolRegistry()
+    
+    leader = TeamLeaderAgent(
+        agent_spec=mock_agent_spec,
+        tool_registry=registry,
+        team_members=mock_team_members
+    )
+    
+    result = leader._delegate_task("unknown_agent", "Test task", {})
+    assert "Error: Agent 'unknown_agent' not found in team" in result
+
+
+@pytest.mark.external
+@pytest.mark.skipif(
+    not os.environ.get("GOOGLE_API_KEY"), 
+    reason="GOOGLE_API_KEY not set - external team test requires API key"
+)
+@patch('orac.team.Agent')
+def test_execute_agent_direct(mock_agent_class, mock_agent_spec, mock_team_members):
+    """Test direct agent execution."""
+    registry = ToolRegistry()
+    
+    # Mock agent instance and return value
+    mock_agent_instance = Mock()
+    mock_agent_instance.run.return_value = "Agent result"
+    mock_agent_class.return_value = mock_agent_instance
+    
+    leader = TeamLeaderAgent(
+        agent_spec=mock_agent_spec,
+        tool_registry=registry,
+        team_members=mock_team_members
+    )
+    
+    # Test direct agent execution
+    result = leader._execute_agent("agent1", {"param": "value"})
+    
+    assert result == "Agent result"
+    mock_agent_instance.run.assert_called_once_with(param="value")

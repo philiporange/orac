@@ -35,6 +35,7 @@ tools:
   - tool:finish # The special tool for completing the task
 
 model_name: "gemini-2.5-flash" # Use a fast, capable model
+provider: google
 generation_config:
   temperature: 0.1
 
