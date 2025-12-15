@@ -6,7 +6,7 @@ Uses explicit provider registry instead of automatic environment access.
 
 from __future__ import annotations
 
-# os import removed - no longer needed for environment access
+import os
 import base64
 from typing import List, Dict, Optional, Any
 from loguru import logger

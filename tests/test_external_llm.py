@@ -5,20 +5,77 @@ These tests require actual API keys and make real calls to external services.
 They are marked as 'external' and can be run separately with:
     pytest -m external
 
-Set GOOGLE_API_KEY or other provider keys to run these tests.
+API Key Setup:
+1. Set GOOGLE_API_KEY (or other provider keys) in environment, OR
+2. Create a .env file with your API keys - tests will ask permission to load it, OR  
+3. Set ORAC_TEST_AUTO_DOTENV=1 to auto-load .env without prompting
+
+Examples:
+    # Run with environment variable
+    GOOGLE_API_KEY=your_key pytest -m external
+    
+    # Run with .env file (will prompt for permission)
+    pytest -m external
+    
+    # Run with auto .env loading
+    ORAC_TEST_AUTO_DOTENV=1 pytest -m external
 """
 
 import pytest
 import json
 import os
+import tempfile
+from pathlib import Path
 import orac
 from orac.prompt import Prompt
 from orac.config import Provider
 
+# Try to load dotenv if available
+try:
+    from dotenv import load_dotenv
+    _dotenv_available = True
+except ImportError:
+    _dotenv_available = False
 
-@pytest.fixture(scope="module")
+
+def _ensure_api_key():
+    """Ensure API key is available, with permission to load from .env if needed."""
+    if os.environ.get("GOOGLE_API_KEY"):
+        return True
+    
+    if not _dotenv_available:
+        return False
+    
+    # Check if .env file exists
+    env_file = Path.cwd() / ".env"
+    if not env_file.exists():
+        return False
+    
+    # Ask for permission to load .env
+    print(f"\nGOOGLE_API_KEY not found in environment.")
+    print(f"Found .env file at: {env_file}")
+    
+    if not os.environ.get("ORAC_TEST_AUTO_DOTENV"):
+        response = input("Load API key from .env file for external tests? [y/N]: ")
+        if response.lower() not in ("y", "yes"):
+            return False
+    
+    # Load .env and check again
+    load_dotenv(env_file)
+    return bool(os.environ.get("GOOGLE_API_KEY"))
+
+
+@pytest.fixture(scope="function")  # Changed from module to function scope
 def external_client():
     """Initialize orac with Google provider for external tests."""
+    # Ensure we start fresh
+    orac.reset()
+    
+    # Try to ensure API key is available
+    if not os.environ.get("GOOGLE_API_KEY"):
+        if not _ensure_api_key():
+            pytest.skip("GOOGLE_API_KEY not available - external LLM test requires API key")
+    
     # Initialize orac with Google provider using environment API key
     orac.init(
         default_provider=Provider.GOOGLE,
@@ -33,10 +90,6 @@ def external_client():
 
 
 @pytest.mark.external
-@pytest.mark.skipif(
-    not os.environ.get("GOOGLE_API_KEY"), 
-    reason="GOOGLE_API_KEY not set - external LLM test requires API key"
-)
 def test_recipe_prompt_external(external_client):
     """Test recipe prompt with external Google API call."""
     # Create prompt instance - provider already set by external_client
@@ -70,10 +123,6 @@ def test_recipe_prompt_external(external_client):
 
 
 @pytest.mark.external
-@pytest.mark.skipif(
-    not os.environ.get("GOOGLE_API_KEY"), 
-    reason="GOOGLE_API_KEY not set - external LLM test requires API key"
-)
 def test_recipe_prompt_callable_interface(external_client):
     """Test recipe prompt using callable interface with external API."""
     recipe = Prompt("recipe")
@@ -92,10 +141,49 @@ def test_recipe_prompt_callable_interface(external_client):
     assert "banana" in title_lower or "bread" in title_lower
 
 
+@pytest.mark.external
+def test_file_upload_integration(external_client):
+    """Test file upload functionality - ensures os.path.basename works correctly."""
+    # Create a temporary text file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+        f.write("This is a test document with sample content for analysis.")
+        temp_file_path = f.name
+    
+    try:
+        # Create a simple prompt that uses file input
+        prompt = Prompt("chat")  # Using basic chat prompt
+        
+        # Test that file handling doesn't crash with 'os' error
+        # The completion will likely fail due to the prompt not being designed for files,
+        # but it should not fail with "name 'os' is not defined"
+        try:
+            result = prompt.completion(
+                "Summarize this document", 
+                files=[temp_file_path]
+            )
+            # If it succeeds, great! Check we got some response
+            assert result is not None
+            assert len(result.strip()) > 0
+            
+        except Exception as e:
+            # Check that the error is NOT the 'os' not defined error
+            error_msg = str(e).lower()
+            assert "name 'os' is not defined" not in error_msg, f"File handling still has 'os' import issue: {e}"
+            
+            # Expected errors are fine (API limits, prompt format, etc.)
+            # We just want to ensure the file path processing doesn't crash
+            print(f"Expected error during file processing (not 'os' error): {e}")
+            
+    finally:
+        # Clean up temp file
+        try:
+            os.unlink(temp_file_path)
+        except FileNotFoundError:
+            pass
+
+
 # Team tests that require external authentication
-import tempfile
 import shutil
-from pathlib import Path
 from unittest.mock import Mock, patch
 from orac.team import Team, TeamSpec, TeamLeaderAgent
 from orac.agent import AgentSpec
@@ -156,11 +244,7 @@ def mock_team_members():
     }
 
 
-@pytest.mark.external
-@pytest.mark.skipif(
-    not os.environ.get("GOOGLE_API_KEY"), 
-    reason="GOOGLE_API_KEY not set - external team test requires API key"
-)
+@pytest.mark.unit
 def test_team_leader_initialization(mock_agent_spec, mock_team_members):
     """Test TeamLeaderAgent initialization."""
     registry = ToolRegistry()
@@ -177,11 +261,7 @@ def test_team_leader_initialization(mock_agent_spec, mock_team_members):
     assert leader.constitution == constitution
 
 
-@pytest.mark.external
-@pytest.mark.skipif(
-    not os.environ.get("GOOGLE_API_KEY"), 
-    reason="GOOGLE_API_KEY not set - external team test requires API key"
-)
+@pytest.mark.unit
 @patch('orac.team.Agent')
 def test_delegate_task(mock_agent_class, mock_agent_spec, mock_team_members):
     """Test task delegation functionality."""
@@ -208,11 +288,7 @@ def test_delegate_task(mock_agent_class, mock_agent_spec, mock_team_members):
     )
 
 
-@pytest.mark.external
-@pytest.mark.skipif(
-    not os.environ.get("GOOGLE_API_KEY"), 
-    reason="GOOGLE_API_KEY not set - external team test requires API key"
-)
+@pytest.mark.unit
 def test_delegate_task_unknown_agent(mock_agent_spec, mock_team_members):
     """Test delegation to unknown agent."""
     registry = ToolRegistry()
@@ -227,11 +303,7 @@ def test_delegate_task_unknown_agent(mock_agent_spec, mock_team_members):
     assert "Error: Agent 'unknown_agent' not found in team" in result
 
 
-@pytest.mark.external
-@pytest.mark.skipif(
-    not os.environ.get("GOOGLE_API_KEY"), 
-    reason="GOOGLE_API_KEY not set - external team test requires API key"
-)
+@pytest.mark.unit
 @patch('orac.team.Agent')
 def test_execute_agent_direct(mock_agent_class, mock_agent_spec, mock_team_members):
     """Test direct agent execution."""

@@ -18,7 +18,7 @@ Examples:
   python run_tests.py tests.test_orac          # Run specific module
   python run_tests.py tests.test_orac test_completion  # Run specific test in module
   python run_tests.py --unit                   # Run only unit tests
-  python run_tests.py --external               # Run only external LLM tests (requires API keys)
+  python run_tests.py --external               # Run only external LLM tests (will prompt for .env)
   python run_tests.py --coverage               # Run with coverage
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter
@@ -26,7 +26,7 @@ Examples:
     parser.add_argument("--unit", action="store_true", help="Run only unit tests")
     parser.add_argument("--integration", action="store_true", help="Run only integration tests")
     parser.add_argument("--e2e", action="store_true", help="Run only end-to-end tests")
-    parser.add_argument("--external", action="store_true", help="Run only external LLM tests (requires API keys)")
+    parser.add_argument("--external", action="store_true", help="Run only external LLM tests (will prompt to load .env if needed)")
     parser.add_argument("--quick", action="store_true", help="Skip slow tests")
     parser.add_argument("--coverage", action="store_true", help="Generate coverage report")
     parser.add_argument("--html-coverage", action="store_true", help="Generate HTML coverage report")

@@ -406,6 +406,20 @@ orac prompt run capital --country "Germany" \
 orac prompt run analyze_document \
   --file reports/report.pdf \
   --file-url https://example.com/image.jpg
+
+# Use custom base URL (via CLI or YAML)
+orac prompt run capital --country "France" \
+  --provider custom \
+  --base-url https://my-custom-api.com/v1/ \
+  --api-key sk-custom-key
+
+# Or specify in YAML file:
+# prompts/custom_endpoint.yaml
+# provider: openai
+# base_url: https://my-custom-api.com/v1/
+# api_key: ${CUSTOM_API_KEY}  # Can use environment variables
+# model_name: gpt-4o-mini
+# prompt: "..."
 ```
 
 ### 8. Discovery and Help
@@ -438,7 +452,13 @@ orac search "translate"               # Find translation-related resources
 While the CLI provides an excellent user experience, you can also use Orac programmatically:
 
 ```python
+import orac
 from orac import Prompt
+
+# IMPORTANT: Initialize Orac before using any components
+client = orac.init()  # Uses interactive consent for API key setup
+# Or for non-interactive usage:
+# client = orac.quick_init(orac.Provider.OPENROUTER, api_key="your-api-key")
 
 # Basic text completion
 llm = Prompt("capital")
@@ -467,6 +487,18 @@ skill_spec = load_skill("orac/skills/calculator.yaml")
 engine = Skill(skill_spec)
 result = engine.execute({"expression": "2 + 2"})
 print(result)  # → {"result": 4.0, "expression_tree": "2 + 2"}
+
+# Alternative initialization patterns
+from orac.config import Provider
+
+# Initialize with specific provider
+client = orac.init(default_provider=Provider.OPENAI)
+
+# Initialize multiple providers
+client = orac.init(providers={
+    Provider.OPENROUTER: {"allow_env": True},
+    Provider.OPENAI: {"api_key_env": "OPENAI_API_KEY"}
+})
 ```
 
 ---
@@ -485,7 +517,9 @@ parameters:
 ### Advanced YAML Features
 ```yaml
 model_name: gemini-2.0-flash
-api_key: ${OPENAI_API_KEY}
+provider: openai                  # Specify LLM provider
+base_url: https://api.openai.com/v1/  # Custom API endpoint (optional)
+api_key: ${OPENAI_API_KEY}        # API key (optional, can use env vars or literal)
 generation_config:
   temperature: 0.5
   max_tokens: 300
@@ -588,6 +622,9 @@ tools:
   - "flow:research_assistant"
   - "skill:calculator"
   - "tool:finish"
+provider: openai              # Optional: specify LLM provider
+base_url: https://api.openai.com/v1/  # Optional: custom API endpoint
+api_key: ${OPENAI_API_KEY}    # Optional: API key (can use env vars)
 model_name: gemini-2.5-pro
 generation_config:
   temperature: 0.7

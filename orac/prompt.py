@@ -1,7 +1,17 @@
 """
 LLM wrapper that loads YAML prompt-specs, resolves parameters, handles
-**local *and* remote files**, and finally calls the OpenAI-compatible
-chat-completion endpoint.
+**local *and* remote files**, supports custom base URLs and API keys,
+and finally calls the OpenAI-compatible chat-completion endpoint.
+
+YAML files can specify:
+- provider: The LLM provider to use (e.g., 'openai', 'google', 'custom')
+- base_url: Custom API endpoint URL (optional, overrides provider defaults)
+- api_key: API key for authentication (optional, can use environment variables or ${VAR} syntax)
+- model_name: The model to use
+- generation_config: Model parameters like temperature, max_tokens, etc.
+- And more...
+
+Note: Command-line flags and programmatic parameters override YAML values.
 """
 
 from __future__ import annotations
@@ -205,7 +215,7 @@ class Prompt:
         self.config = _deep_merge_dicts(base_config, prompt_config)
         self._parse_and_validate_config()
         
-        # 4. Resolve provider (runtime takes precedence over YAML)
+        # 4. Resolve provider, base_url, and api_key (runtime takes precedence over YAML)
         self.provider: Provider | None = None
         if self._runtime_provider:
             self.provider = (
@@ -213,6 +223,10 @@ class Prompt:
             )
         elif self.yaml_provider:
             self.provider = Provider(self.yaml_provider)
+
+        # Store base_url and api_key from YAML if provided
+        self.base_url: str | None = self.yaml_base_url
+        self.api_key: str | None = self.yaml_api_key
 
         logger.debug(
             f"Initialising Prompt for prompt: {self.prompt_name} "
@@ -327,6 +341,14 @@ class Prompt:
         self.yaml_provider = data.get("provider")
         if self.yaml_provider is not None and not isinstance(self.yaml_provider, str):
             raise ValueError("'provider' must be a string when provided.")
+
+        self.yaml_base_url = data.get("base_url")
+        if self.yaml_base_url is not None and not isinstance(self.yaml_base_url, str):
+            raise ValueError("'base_url' must be a string when provided.")
+
+        self.yaml_api_key = data.get("api_key")
+        if self.yaml_api_key is not None and not isinstance(self.yaml_api_key, str):
+            raise ValueError("'api_key' must be a string when provided.")
 
         # validate parameters
         for param in self.parameters_spec:
@@ -571,6 +593,52 @@ class Prompt:
             runtime_provider = self.provider
             if provider is not None:
                 runtime_provider = Provider(provider) if isinstance(provider, str) else provider
+
+            # If base_url or api_key is specified in YAML, update provider configuration
+            if (self.base_url or self.api_key) and runtime_provider:
+                # Get the provider registry from client
+                registry = self.client.get_provider_registry()
+
+                # Check if provider needs updating
+                provider_info = registry.get_provider_info(runtime_provider)
+                needs_update = (
+                    not provider_info or
+                    (self.base_url and provider_info.get('base_url') != self.base_url)
+                )
+
+                if needs_update:
+                    # Update provider with custom base_url and/or api_key
+                    # Note: This requires re-adding the provider, which will update its configuration
+                    try:
+                        # Determine which API key to use (YAML takes precedence if provided)
+                        if self.api_key:
+                            api_key_to_use = self.api_key
+                            logger.debug(f"Using API key from YAML for provider {runtime_provider.value}")
+                        else:
+                            # Get API key from existing registration or auth manager
+                            auth_manager = self.client.get_auth_manager()
+                            api_key_to_use = auth_manager.get_api_key(
+                                runtime_provider,
+                                allow_env=True,
+                                from_config=True
+                            )
+
+                        # Re-add provider with custom configuration
+                        self.client.add_provider(
+                            runtime_provider,
+                            api_key=api_key_to_use,
+                            base_url=self.base_url,
+                            model_name=self.model_name_override
+                        )
+
+                        if self.base_url and self.api_key:
+                            logger.info(f"Updated provider {runtime_provider.value} with custom base_url and api_key from YAML")
+                        elif self.base_url:
+                            logger.info(f"Updated provider {runtime_provider.value} with custom base_url: {self.base_url}")
+                        elif self.api_key:
+                            logger.info(f"Updated provider {runtime_provider.value} with custom api_key from YAML")
+                    except Exception as e:
+                        logger.warning(f"Could not update provider configuration: {e}. Using defaults.")
 
             # Call via client
             result = self.client.chat(

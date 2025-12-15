@@ -29,6 +29,8 @@ class Provider(str, Enum):
     ANTHROPIC = "anthropic"
     AZURE = "azure"
     OPENROUTER = "openrouter"
+    ZAI = "z.ai"
+    CLI = "cli"
     CUSTOM = "custom"
 
 
@@ -54,6 +56,14 @@ _PROVIDER_DEFAULTS: dict[Provider, dict[str, str]] = {
         "base_url": "https://openrouter.ai/api/v1/",
         "key_env": "OPENROUTER_API_KEY",
     },
+    Provider.ZAI: {
+        "base_url": "https://api.z.ai/api/coding/paas/v4",
+        "key_env": "ZAI_API_KEY",
+    },
+    Provider.CLI: {
+        "base_url": "http://10.0.0.10:8317/v1/chat/completions",
+        "key_env": "CLI_API_KEY",
+    }
 }
 
 # Provider selection moved to methods to avoid import-time env access

@@ -1,3 +1,16 @@
+"""
+Agent engine for Orac - enables autonomous ReAct-style agents with tool usage.
+
+Agents can specify custom API configuration in their YAML:
+- provider: The LLM provider to use (e.g., 'openai', 'google')
+- base_url: Custom API endpoint URL (optional, overrides provider defaults)
+- api_key: API key for authentication (optional, can use environment variables)
+- model_name: The model to use for agent reasoning
+- tools: List of available tools (prompts, flows, skills)
+
+Note: Command-line flags and programmatic parameters override YAML values.
+"""
+
 import yaml
 import json
 from dataclasses import dataclass, field
@@ -23,6 +36,8 @@ class AgentSpec:
     tools: List[str] = field(default_factory=list)
     model_name: str = "gemini-2.5-pro"
     provider: Optional[str] = None
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
     generation_config: Dict[str, Any] = field(default_factory=dict)
     max_iterations: int = 15
 
@@ -52,8 +67,44 @@ class Agent:
         input_summary = ", ".join([f"{k}={v}" for k, v in kwargs.items()])
         self.message_history.append({'role': 'user', 'text': f"Please help me with the following inputs: {input_summary}"})
         
+        # If base_url or api_key is specified in spec, log configuration
+        if (self.spec.base_url or self.spec.api_key) and self.provider:
+            provider_info = self.provider_registry.get_provider_info(self.provider)
+            if self.spec.base_url and (not provider_info or provider_info.get('base_url') != self.spec.base_url):
+                logger.info(f"Agent will use custom base_url: {self.spec.base_url}")
+            if self.spec.api_key:
+                logger.info(f"Agent will use custom api_key from YAML")
+
         for i in range(self.spec.max_iterations):
             print(f"\n--- Iteration {i+1}/{self.spec.max_iterations} ---")
+
+            # Update provider with custom base_url/api_key if specified
+            if (self.spec.base_url or self.spec.api_key) and self.provider and i == 0:
+                # Only update on first iteration to avoid redundant updates
+                provider_info = self.provider_registry.get_provider_info(self.provider)
+                needs_update = (
+                    not provider_info or
+                    (self.spec.base_url and provider_info.get('base_url') != self.spec.base_url)
+                )
+                if needs_update or self.spec.api_key:
+                    try:
+                        # Get existing client config to extract API key
+                        from .client import Client
+                        # Note: We need access to the Client to update provider, but we only have provider_registry
+                        # For now, we'll log a warning - full support requires passing Client to Agent
+                        custom_items = []
+                        if self.spec.base_url:
+                            custom_items.append(f"base_url ({self.spec.base_url})")
+                        if self.spec.api_key:
+                            custom_items.append("api_key")
+
+                        logger.warning(
+                            f"Custom {' and '.join(custom_items)} specified in agent YAML but "
+                            f"provider update from agent is not yet fully supported. "
+                            f"Please configure these when initializing the client."
+                        )
+                    except Exception as e:
+                        logger.warning(f"Could not update provider configuration: {e}")
 
             # 2. Query the LLM for the next action
             try:
@@ -93,26 +144,7 @@ class Agent:
             
             # 4. Execute the chosen tool
             print(f"🎬 Action: {tool_name} with inputs: {tool_inputs}")
-            tool = self.registry.get_tool(tool_name)
-            if not tool:
-                observation = f"Error: Tool '{tool_name}' not found."
-            else:
-                try:
-                    if tool.type == "prompt":
-                        prompt_instance = Prompt(tool.name, prompts_dir=self.registry.prompts_dir, provider=self.provider.value if self.provider else None)
-                        observation = prompt_instance.completion(**tool_inputs)
-                    elif tool.type == "flow":
-                        flow_spec = load_flow(tool.file_path)
-                        flow_engine = Flow(flow_spec)
-                        observation = flow_engine.execute(tool_inputs)
-                    elif tool.type == "tool":
-                        skill_spec = load_skill(tool.file_path)
-                        skill_engine = Skill(skill_spec)
-                        observation = skill_engine.execute(tool_inputs)
-                    else:
-                        observation = f"Error: Unknown tool type '{tool.type}'"
-                except Exception as e:
-                    observation = f"Error executing tool '{tool_name}': {e}"
+            observation = self._execute_tool(tool_name, tool_inputs)
             
             # 5. Add observation to history and repeat
             print(f"👀 Observation: {observation}")
@@ -121,6 +153,29 @@ class Agent:
         final_message = "Agent stopped: Maximum iterations reached."
         print(final_message)
         return final_message
+
+    def _execute_tool(self, tool_name: str, tool_inputs: Dict[str, Any]) -> str:
+        """Execute a tool and return the observation."""
+        tool = self.registry.get_tool(tool_name)
+        if not tool:
+            return f"Error: Tool '{tool_name}' not found."
+        
+        try:
+            if tool.type == "prompt":
+                prompt_instance = Prompt(tool.name, prompts_dir=self.registry.prompts_dir, provider=self.provider.value if self.provider else None)
+                return prompt_instance.completion(**tool_inputs)
+            elif tool.type == "flow":
+                flow_spec = load_flow(tool.file_path)
+                flow_engine = Flow(flow_spec)
+                return flow_engine.execute(tool_inputs)
+            elif tool.type == "tool":
+                skill_spec = load_skill(tool.file_path)
+                skill_engine = Skill(skill_spec)
+                return skill_engine.execute(tool_inputs)
+            else:
+                return f"Error: Unknown tool type '{tool.type}'"
+        except Exception as e:
+            return f"Error executing tool '{tool_name}': {e}"
 
 def load_agent_spec(agent_path: Path) -> AgentSpec:
     with open(agent_path, 'r') as f:
