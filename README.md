@@ -401,7 +401,60 @@ orac team run research_team --topic "quantum computing applications" --depth com
 
 The leader will coordinate the team, delegating tasks to specialists and synthesizing their contributions into a final research report.
 
-### 7. Advanced Usage
+### 7. File Attachments
+
+Orac supports attaching files to prompts for multimodal LLM interactions. Files can be attached via CLI flags, YAML configuration, or Python API.
+
+**CLI Usage:**
+```bash
+# Attach a single local file
+orac prompt run analyze_document --file ~/Documents/report.pdf
+
+# Attach multiple local files
+orac prompt run compare_images --file image1.png --file image2.png
+
+# Attach remote files via URL
+orac prompt run analyze_image --file-url https://example.com/photo.jpg
+
+# Mix local and remote files
+orac prompt run research --file notes.txt --file-url https://arxiv.org/pdf/paper.pdf
+```
+
+**YAML Configuration:**
+```yaml
+# prompts/analyze_paper.yaml
+prompt: "Analyze the attached research paper and summarize key findings."
+model_name: gemini-2.5-flash
+
+# Attach files by default (supports glob patterns)
+files:
+  - data/*.pdf
+  - images/diagram.png
+
+# Attach remote files by default
+file_urls:
+  - https://example.com/reference.pdf
+
+# Require at least one file to be attached
+require_file: true
+```
+
+**Python API:**
+```python
+from orac import Prompt
+
+# Attach files when creating the prompt
+prompt = Prompt("analyze", files=["report.pdf", "data.csv"])
+result = prompt.completion()
+
+# Or attach files at completion time
+prompt = Prompt("analyze")
+result = prompt.completion(file_urls=["https://example.com/image.jpg"])
+```
+
+Supported file types depend on the LLM provider (images, PDFs, text files, etc.).
+
+### 8. Advanced Usage
 
 ```bash
 # Override model and configuration
@@ -415,11 +468,6 @@ orac prompt run recipe --json-output
 # Schema validation
 orac prompt run capital --country "Germany" \
   --response-schema schemas/capital.schema.json
-
-# Attach local and remote files
-orac prompt run analyze_document \
-  --file reports/report.pdf \
-  --file-url https://example.com/image.jpg
 
 # Use custom base URL (via CLI or YAML)
 orac prompt run capital --country "France" \
@@ -436,7 +484,7 @@ orac prompt run capital --country "France" \
 # prompt: "..."
 ```
 
-### 8. Discovery and Help
+### 9. Discovery and Help
 
 ```bash
 # Discover available resources

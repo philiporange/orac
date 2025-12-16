@@ -529,6 +529,83 @@ with orac.patch('orac.client.Client.chat', return_value=mock_json_response):
     print(f"Steps: {result['steps']}")
 ```
 
+### File Attachments
+
+The `Prompt` class supports attaching files for multimodal LLM interactions. Files can be local paths, glob patterns, or remote URLs.
+
+#### Attaching Files at Initialization
+
+Pass files when creating the `Prompt` instance:
+
+```python
+import orac
+from orac import Prompt
+
+# Attach local files
+prompt = Prompt("analyze", files=["report.pdf", "data.csv"])
+
+# Attach remote files via URL
+prompt = Prompt("analyze", file_urls=["https://example.com/image.jpg"])
+
+# Mix local and remote
+prompt = Prompt("analyze",
+    files=["local_doc.pdf"],
+    file_urls=["https://example.com/remote.pdf"]
+)
+```
+
+#### Attaching Files at Completion Time
+
+You can also attach files when calling `completion()`:
+
+```python
+from orac import Prompt
+
+prompt = Prompt("analyze")
+
+# Attach remote files at runtime
+result = prompt.completion(file_urls=["https://example.com/image.jpg"])
+```
+
+#### YAML Configuration for Files
+
+Prompts can specify default files and file requirements in their YAML configuration:
+
+```yaml
+# prompts/document_analyzer.yaml
+prompt: "Analyze the attached documents and provide a summary."
+model_name: gemini-2.5-flash
+
+# Default files to attach (supports glob patterns)
+files:
+  - data/*.pdf
+  - images/*.png
+
+# Default remote files
+file_urls:
+  - https://example.com/reference.pdf
+
+# Require at least one file to be attached (fails if no files provided)
+require_file: true
+```
+
+#### File Resolution
+
+Files are resolved in this order:
+1. **Runtime files**: Passed via `files=` parameter or CLI `--file` flag
+2. **Runtime URLs**: Passed via `file_urls=` parameter or CLI `--file-url` flag
+3. **YAML files**: From `files:` field in prompt YAML (glob patterns expanded)
+4. **YAML URLs**: From `file_urls:` field in prompt YAML
+
+Remote files are automatically downloaded and cached.
+
+#### Supported File Types
+
+Supported file types depend on the LLM provider:
+- **Images**: PNG, JPG, GIF, WebP (most providers)
+- **Documents**: PDF (Google Gemini, some others)
+- **Text**: Plain text, code files (most providers)
+
 ### Conversation Management
 
 The `Prompt` class integrates with `ConversationDB` to manage multi-turn interactions.

@@ -542,9 +542,11 @@ class Prompt:
 
             # ----------------------- File handling --------------------------- #
             local_files = self._resolve_local_file_paths()
-            local_files.extend(
-                os.path.abspath(p) for p in (self.files or []) if p and os.path.isfile(p)
-            )
+            for p in (self.files or []):
+                if p:
+                    expanded = os.path.expanduser(p)
+                    if os.path.isfile(expanded):
+                        local_files.append(os.path.abspath(expanded))
 
             all_urls = self._resolve_remote_urls()
             if file_urls:

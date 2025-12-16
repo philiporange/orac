@@ -221,15 +221,15 @@ class PromptCommand(ResourceCommand, ListableMixin, ValidatableMixin):
                 model_name=args.model_name,
                 generation_config=gen_config or None,
                 verbose=args.verbose,
-                files=getattr(prompt_args, "files", None),
-                file_urls=getattr(prompt_args, "file_urls", None),
+                files=getattr(args, "files", None),
+                file_urls=getattr(args, "file_urls", None),
                 provider=args.provider,
-                conversation_id=getattr(prompt_args, "conversation_id", None),
-                auto_save=not getattr(prompt_args, "no_save", False),
+                conversation_id=getattr(args, "conversation_id", None),
+                auto_save=not getattr(args, "no_save", False),
                 progress_callback=progress_callback,
             )
 
-            if getattr(prompt_args, "reset_conversation", False):
+            if getattr(args, "reset_conversation", False):
                 wrapper.reset_conversation()
                 logger.info("Reset conversation history")
 
