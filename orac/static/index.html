@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orac - LLM Framework</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#6366f1',
+                        secondary: '#8b5cf6'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .loading {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body class="h-full bg-gray-900 text-gray-100">
+    <div id="app" class="h-full flex flex-col">
+        <!-- Header -->
+        <header class="bg-gray-800 border-b border-gray-700 px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <h1 class="text-2xl font-bold text-primary">Orac</h1>
+                    <span class="text-gray-400 text-sm">YAML-driven LLM Framework</span>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span id="status" class="text-sm text-green-400">Connected</span>
+                </div>
+            </div>
+        </header>
+
+        <div class="flex-1 flex overflow-hidden">
+            <!-- Sidebar -->
+            <nav class="w-64 bg-gray-800 border-r border-gray-700 flex flex-col">
+                <div class="p-4 space-y-2">
+                    <button onclick="showSection('prompts')" class="nav-btn w-full text-left px-4 py-2 rounded-lg hover:bg-gray-700 transition flex items-center space-x-3" data-section="prompts">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+                        <span>Prompts</span>
+                    </button>
+                    <button onclick="showSection('flows')" class="nav-btn w-full text-left px-4 py-2 rounded-lg hover:bg-gray-700 transition flex items-center space-x-3" data-section="flows">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                        <span>Flows</span>
+                    </button>
+                    <button onclick="showSection('skills')" class="nav-btn w-full text-left px-4 py-2 rounded-lg hover:bg-gray-700 transition flex items-center space-x-3" data-section="skills">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        <span>Skills</span>
+                    </button>
+                    <button onclick="showSection('agents')" class="nav-btn w-full text-left px-4 py-2 rounded-lg hover:bg-gray-700 transition flex items-center space-x-3" data-section="agents">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                        <span>Agents</span>
+                    </button>
+                    <button onclick="showSection('teams')" class="nav-btn w-full text-left px-4 py-2 rounded-lg hover:bg-gray-700 transition flex items-center space-x-3" data-section="teams">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                        <span>Teams</span>
+                    </button>
+                    <button onclick="showSection('chat')" class="nav-btn w-full text-left px-4 py-2 rounded-lg hover:bg-gray-700 transition flex items-center space-x-3" data-section="chat">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z"></path></svg>
+                        <span>Chat</span>
+                    </button>
+                </div>
+                <div class="mt-auto p-4 border-t border-gray-700">
+                    <button onclick="showSection('config')" class="nav-btn w-full text-left px-4 py-2 rounded-lg hover:bg-gray-700 transition flex items-center space-x-3 text-gray-400" data-section="config">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                        <span>Config</span>
+                    </button>
+                </div>
+            </nav>
+
+            <!-- Main content -->
+            <main class="flex-1 overflow-auto p-6">
+                <!-- Prompts Section -->
+                <section id="section-prompts" class="section hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-semibold">Prompts</h2>
+                        <button onclick="refreshPrompts()" class="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 transition text-sm">Refresh</button>
+                    </div>
+                    <div id="prompts-list" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        <div class="loading text-gray-400">Loading prompts...</div>
+                    </div>
+                </section>
+
+                <!-- Flows Section -->
+                <section id="section-flows" class="section hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-semibold">Flows</h2>
+                        <button onclick="refreshFlows()" class="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 transition text-sm">Refresh</button>
+                    </div>
+                    <div id="flows-list" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        <div class="loading text-gray-400">Loading flows...</div>
+                    </div>
+                </section>
+
+                <!-- Skills Section -->
+                <section id="section-skills" class="section hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-semibold">Skills</h2>
+                        <button onclick="refreshSkills()" class="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 transition text-sm">Refresh</button>
+                    </div>
+                    <div id="skills-list" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        <div class="loading text-gray-400">Loading skills...</div>
+                    </div>
+                </section>
+
+                <!-- Agents Section -->
+                <section id="section-agents" class="section hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-semibold">Agents</h2>
+                        <button onclick="refreshAgents()" class="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 transition text-sm">Refresh</button>
+                    </div>
+                    <div id="agents-list" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        <div class="loading text-gray-400">Loading agents...</div>
+                    </div>
+                </section>
+
+                <!-- Teams Section -->
+                <section id="section-teams" class="section hidden">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-semibold">Teams</h2>
+                        <button onclick="refreshTeams()" class="px-3 py-1 bg-gray-700 rounded hover:bg-gray-600 transition text-sm">Refresh</button>
+                    </div>
+                    <div id="teams-list" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        <div class="loading text-gray-400">Loading teams...</div>
+                    </div>
+                </section>
+
+                <!-- Chat Section -->
+                <section id="section-chat" class="section hidden h-full flex flex-col">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-semibold">Chat</h2>
+                        <div class="flex items-center space-x-2">
+                            <select id="chat-conversation" class="bg-gray-700 rounded px-3 py-1 text-sm">
+                                <option value="">New Conversation</option>
+                            </select>
+                            <button onclick="newConversation()" class="px-3 py-1 bg-primary rounded hover:bg-indigo-600 transition text-sm">New</button>
+                        </div>
+                    </div>
+                    <div id="chat-messages" class="flex-1 overflow-auto bg-gray-800 rounded-lg p-4 mb-4 space-y-4">
+                        <div class="text-gray-400 text-center py-8">Start a conversation</div>
+                    </div>
+                    <form id="chat-form" class="flex space-x-2">
+                        <input type="text" id="chat-input" placeholder="Type your message..." class="flex-1 bg-gray-700 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary">
+                        <button type="submit" class="px-6 py-2 bg-primary rounded-lg hover:bg-indigo-600 transition font-medium">Send</button>
+                    </form>
+                </section>
+
+                <!-- Config Section -->
+                <section id="section-config" class="section hidden">
+                    <h2 class="text-xl font-semibold mb-6">Configuration</h2>
+                    <div id="config-content" class="space-y-6">
+                        <div class="loading text-gray-400">Loading configuration...</div>
+                    </div>
+                </section>
+
+                <!-- Run Modal/Panel -->
+                <div id="run-panel" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                    <div class="bg-gray-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+                        <div class="flex justify-between items-center p-4 border-b border-gray-700">
+                            <h3 id="run-panel-title" class="text-lg font-semibold">Run</h3>
+                            <button onclick="closeRunPanel()" class="text-gray-400 hover:text-white">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
+                        </div>
+                        <div id="run-panel-content" class="p-4 overflow-auto flex-1">
+                            <!-- Dynamic content -->
+                        </div>
+                        <div id="run-panel-result" class="hidden p-4 border-t border-gray-700 bg-gray-900 max-h-64 overflow-auto">
+                            <h4 class="text-sm font-medium text-gray-400 mb-2">Result</h4>
+                            <pre id="run-result-text" class="text-sm text-gray-100 whitespace-pre-wrap"></pre>
+                        </div>
+                        <div class="flex justify-end space-x-2 p-4 border-t border-gray-700">
+                            <button onclick="closeRunPanel()" class="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600 transition">Cancel</button>
+                            <button id="run-panel-submit" onclick="executeRun()" class="px-4 py-2 bg-primary rounded hover:bg-indigo-600 transition font-medium">Run</button>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

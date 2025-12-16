@@ -18,22 +18,43 @@ def add_config_parser(subparsers):
         help='System management',
         description='Manage system configuration'
     )
-    
+
     # Create action subparsers
     config_subparsers = config_parser.add_subparsers(
         dest='action',
         help='Available actions',
         metavar='<action>'
     )
-    
+
+    # init action
+    init_parser = config_subparsers.add_parser(
+        'init',
+        help='Initialize configuration interactively'
+    )
+    init_parser.add_argument(
+        '--project',
+        action='store_true',
+        help='Create project config (.orac/config.yaml) instead of user config'
+    )
+
     # show action
     show_parser = config_subparsers.add_parser('show', help='Show current configuration')
-    
+    show_parser.add_argument(
+        '--resolved',
+        action='store_true',
+        help='Show fully resolved configuration with all layers merged'
+    )
+
     # set action
     set_parser = config_subparsers.add_parser('set', help='Set configuration value')
-    set_parser.add_argument('key', help='Configuration key')
+    set_parser.add_argument('key', help='Configuration key (provider, model, api_key_env, base_url)')
     set_parser.add_argument('value', help='Configuration value')
-    
+    set_parser.add_argument(
+        '--project',
+        action='store_true',
+        help='Set in project config instead of user config'
+    )
+
     return config_parser
 
 
@@ -174,10 +195,12 @@ This is useful for troubleshooting authentication issues.
 
 def handle_config_commands(args, remaining):
     """Handle config resource commands."""
-    if args.action == 'show':
-        show_config_command()
+    if args.action == 'init':
+        config_init_command(getattr(args, 'project', False))
+    elif args.action == 'show':
+        show_config_command(getattr(args, 'resolved', False))
     elif args.action == 'set':
-        set_config_command(args.key, args.value)
+        set_config_command(args.key, args.value, getattr(args, 'project', False))
     else:
         print(f"Unknown config action: {args.action}", file=sys.stderr)
         sys.exit(1)
@@ -226,46 +249,152 @@ def handle_consent_commands(args):
         sys.exit(1)
 
 
-def show_config_command():
-    """Show current configuration using new Config methods."""
-    print("Current Orac Configuration:")
+def config_init_command(project: bool = False):
+    """Initialize configuration interactively."""
+    from orac.config import ConfigLoader
+
+    config_loader = ConfigLoader()
+    auth_manager = AuthManager()
+
+    target = "project" if project else "user"
+    config_path = config_loader.project_config_path if project else config_loader.user_config_path
+
+    print(f"\n🔧 Initializing {target} configuration")
     print("=" * 40)
-    
-    print("\nConfiguration Directories:")
-    print(f"  Prompts:       {Config.get_prompts_dir()}")
-    print(f"  Flows:         {Config.get_flows_dir()}")
-    print(f"  Skills:        {Config.get_skills_dir()}")
-    print(f"  Agents:        {Config.get_agents_dir()}")
-    print(f"  Config File:   {Config.get_config_file()}")
-    
-    print(f"\nLogging:")
-    print(f"  Log File:      {Config.get_log_file_path()}")
-    
-    print(f"\nConversation:")
-    print(f"  Database:      {Config.get_conversation_db_path()}")
-    print(f"  Default Mode:  {Config.get_default_conversation_mode()}")
-    print(f"  Max History:   {Config.get_max_conversation_history()}")
-    
-    print(f"\nModel Defaults:")
-    print(f"  Model Name:    {Config.get_default_model_name()}")
-    
-    # Show provider from environment (but note it's not used automatically)
-    provider = Config.get_provider_from_env()
-    print(f"\nEnvironment Provider (not auto-loaded): {provider.value if provider else '(not set)'}")
-    
-    print("\nNote: Environment variables are only accessed with explicit consent.")
+
+    # Auto-detect available providers
+    detected = auth_manager.detect_available_providers()
+    available = [p for p, info in detected.items() if info["available"]]
+
+    if available:
+        print("\nDetected API keys:")
+        for provider in available:
+            info = detected[provider]
+            print(f"  ✓ {info['env_var']}")
+
+    # Ask for provider
+    recommended = auth_manager.get_recommended_provider()
+    if recommended:
+        default_provider = recommended.value
+    else:
+        default_provider = "openrouter"
+
+    provider_input = input(f"\nDefault provider [{default_provider}]: ").strip()
+    provider = provider_input if provider_input else default_provider
+
+    # Ask for model
+    default_model = Config.get_default_model_name()
+    model_input = input(f"Default model [{default_model}]: ").strip()
+    model = model_input if model_input else default_model
+
+    # Build config
+    config = {
+        "provider": provider,
+        "model": model,
+    }
+
+    # Save config
+    if project:
+        config_loader.save_project_config(config)
+    else:
+        config_loader.save_user_config(config)
+
+    print(f"\n✅ Configuration saved to {config_path}")
+    print(f"   provider: {provider}")
+    print(f"   model: {model}")
 
 
-def set_config_command(key: str, value: str):
+def show_config_command(resolved: bool = False):
+    """Show current configuration."""
+    from orac.config import ConfigLoader
+
+    config_loader = ConfigLoader()
+
+    print("Orac Configuration")
+    print("=" * 50)
+
+    # Show config file locations
+    print("\nConfiguration Files:")
+    user_exists = "✓" if config_loader.has_user_config else "✗"
+    project_exists = "✓" if config_loader.has_project_config else "✗"
+    print(f"  {user_exists} User:    {config_loader.user_config_path}")
+    print(f"  {project_exists} Project: {config_loader.project_config_path}")
+
+    if resolved:
+        # Show fully resolved configuration
+        print("\nResolved Configuration (all layers merged):")
+        resolved_config = config_loader.resolve_with_overrides()
+        for key, value in sorted(resolved_config.items()):
+            if isinstance(value, dict):
+                print(f"  {key}:")
+                for k, v in value.items():
+                    print(f"    {k}: {v}")
+            else:
+                print(f"  {key}: {value}")
+    else:
+        # Show each layer separately
+        if config_loader._user_config:
+            print("\nUser Config (~/.config/orac/config.yaml):")
+            for key, value in config_loader._user_config.items():
+                print(f"  {key}: {value}")
+
+        if config_loader._project_config:
+            print("\nProject Config (.orac/config.yaml):")
+            for key, value in config_loader._project_config.items():
+                print(f"  {key}: {value}")
+
+        if not config_loader._user_config and not config_loader._project_config:
+            print("\nNo configuration files found.")
+            print("Run 'orac config init' to create one.")
+
+    # Show resource directories with search order
+    print("\nResource Directories (search order):")
+    print("  Prompts:")
+    for d in Config.get_prompts_dirs():
+        exists = "✓" if d.exists() else "✗"
+        print(f"    {exists} {d}")
+    print("  Flows:")
+    for d in Config.get_flows_dirs():
+        exists = "✓" if d.exists() else "✗"
+        print(f"    {exists} {d}")
+
+    print(f"\nDefaults:")
+    print(f"  Model:   {Config.get_default_model_name()}")
+
+
+def set_config_command(key: str, value: str, project: bool = False):
     """Set configuration value."""
-    # For now, just show what would be set
-    # In a full implementation, this might update a config file
-    print(f"Configuration setting: {key} = {value}")
-    print("\nNote: Most configuration is now managed via:")
-    print("1. YAML configuration files")
-    print("2. Runtime parameters")
-    print("3. Environment variables (with explicit consent)")
-    print(f"\nTo set environment variable: export {key}={value}")
+    from orac.config import ConfigLoader
+
+    # Validate key
+    valid_keys = ['provider', 'model', 'api_key_env', 'base_url']
+    if key not in valid_keys:
+        print(f"❌ Invalid key: {key}")
+        print(f"   Valid keys: {', '.join(valid_keys)}")
+        sys.exit(1)
+
+    config_loader = ConfigLoader()
+    target = "project" if project else "user"
+
+    # Load existing config
+    if project:
+        existing = config_loader._project_config.copy()
+        config_path = config_loader.project_config_path
+    else:
+        existing = config_loader._user_config.copy()
+        config_path = config_loader.user_config_path
+
+    # Update value
+    existing[key] = value
+
+    # Save
+    if project:
+        config_loader.save_project_config(existing)
+    else:
+        config_loader.save_user_config(existing)
+
+    print(f"✅ Set {key} = {value} in {target} config")
+    print(f"   Saved to: {config_path}")
 
 
 def auth_login_command_v2(args):

@@ -283,7 +283,7 @@ class AuthManager:
     
     def show_consent_status(self) -> Dict[str, Any]:
         """Get consent status for all providers.
-        
+
         Returns:
             Dictionary with consent status information
         """
@@ -291,7 +291,7 @@ class AuthManager:
             "consent_file": str(self._consent_file),
             "providers": {}
         }
-        
+
         for provider in Provider:
             auth = self._providers.get(provider)
             if auth:
@@ -308,5 +308,96 @@ class AuthManager:
                     "api_key_env": None,
                     "base_url": None,
                 }
-        
+
         return status
+
+    def detect_available_providers(self) -> Dict[Provider, Dict[str, Any]]:
+        """Detect which providers have API keys available in environment.
+
+        This method checks environment variables without requiring consent,
+        only reporting whether keys exist (not their values).
+
+        Returns:
+            Dict mapping Provider to info about availability:
+            {
+                Provider.OPENROUTER: {
+                    "available": True,
+                    "env_var": "OPENROUTER_API_KEY",
+                    "has_consent": False
+                },
+                ...
+            }
+        """
+        available = {}
+
+        for provider in Provider:
+            if provider == Provider.CUSTOM:
+                # Custom provider doesn't have a default env var
+                continue
+
+            if provider not in _PROVIDER_DEFAULTS:
+                continue
+
+            env_var = _PROVIDER_DEFAULTS[provider].get("key_env")
+            if not env_var:
+                continue
+
+            # Check if env var exists (without reading the value for consent purposes)
+            # We just check if it's set and non-empty
+            has_key = bool(os.getenv(env_var))
+
+            available[provider] = {
+                "available": has_key,
+                "env_var": env_var,
+                "has_consent": self.has_consent(provider)
+            }
+
+        return available
+
+    def get_available_providers(self) -> List[Provider]:
+        """Get list of providers that have API keys available.
+
+        Returns:
+            List of Provider enums that have API keys in environment
+        """
+        detected = self.detect_available_providers()
+        return [p for p, info in detected.items() if info["available"]]
+
+    def get_recommended_provider(self) -> Optional[Provider]:
+        """Get the recommended provider based on availability.
+
+        Preference order: OpenRouter > Google > Anthropic > OpenAI > others
+
+        Returns:
+            Recommended Provider or None if none available
+        """
+        available = self.get_available_providers()
+        if not available:
+            return None
+
+        # Preference order
+        preference = [
+            Provider.OPENROUTER,  # Multi-model access
+            Provider.GOOGLE,       # Free tier available
+            Provider.ANTHROPIC,
+            Provider.OPENAI,
+            Provider.AZURE,
+            Provider.CLI,
+            Provider.ZAI,
+        ]
+
+        for provider in preference:
+            if provider in available:
+                return provider
+
+        # Return first available if none in preference list
+        return available[0]
+
+    @property
+    def is_first_run(self) -> bool:
+        """Check if this is the first run (no consent granted yet).
+
+        Returns:
+            True if no providers have consent granted
+        """
+        return len(self.get_consented_providers()) == 0

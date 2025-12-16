@@ -15,7 +15,7 @@ import yaml
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
 from string import Template
 
 from .config import Config, Provider
@@ -177,7 +177,35 @@ class Agent:
         except Exception as e:
             return f"Error executing tool '{tool_name}': {e}"
 
-def load_agent_spec(agent_path: Path) -> AgentSpec:
+def find_agent(name: str) -> Optional[Path]:
+    """Find an agent by name, searching all agent directories.
+
+    Args:
+        name: Agent name (without .yaml extension)
+
+    Returns:
+        Path to the agent file, or None if not found
+    """
+    from orac.config import Config
+    return Config.find_resource(name, 'agents')
+
+
+def load_agent_spec(agent_path: Union[str, Path]) -> AgentSpec:
+    """Load and validate agent YAML file.
+
+    Args:
+        agent_path: Path to agent file, or agent name to search for
+    """
+    agent_path = Path(agent_path)
+
+    # If path doesn't exist and doesn't look like a path, try to find by name
+    if not agent_path.exists() and not agent_path.suffix:
+        found = find_agent(str(agent_path))
+        if found:
+            agent_path = found
+        else:
+            raise FileNotFoundError(f"Agent not found: {agent_path}")
+
     with open(agent_path, 'r') as f:
         data = yaml.safe_load(f)
     return AgentSpec(**data)

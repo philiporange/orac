@@ -208,3 +208,53 @@ def load_team_spec(team_path: Path) -> TeamSpec:
     with open(team_path, 'r') as f:
         data = yaml.safe_load(f)
     return TeamSpec(**data)
+
+
+def find_team(name: str) -> Optional[Path]:
+    """Find a team by name, searching all team directories.
+
+    Args:
+        name: Team name (without .yaml extension)
+
+    Returns:
+        Path to the team file, or None if not found
+    """
+    from orac.config import Config
+    return Config.find_resource(name, 'teams')
+
+
+def list_teams(teams_dir: str) -> List[Dict[str, Any]]:
+    """List all teams in a directory.
+
+    Args:
+        teams_dir: Directory to search for teams
+
+    Returns:
+        List of team info dictionaries
+    """
+    teams = []
+    teams_path = Path(teams_dir)
+
+    if not teams_path.exists():
+        return teams
+
+    for yaml_file in list(teams_path.glob("*.yaml")) + list(teams_path.glob("*.yml")):
+        try:
+            spec = load_team_spec(yaml_file)
+            teams.append({
+                "name": spec.name,
+                "description": spec.description,
+                "leader": spec.leader,
+                "agents": spec.agents,
+                "inputs": spec.inputs
+            })
+        except Exception:
+            teams.append({
+                "name": yaml_file.stem,
+                "description": "(Error loading)",
+                "leader": "",
+                "agents": [],
+                "inputs": []
+            })
+
+    return teams

@@ -10,6 +10,7 @@ from orac.logger import configure_console_logging
 from orac.config import Config
 from orac.auth import AuthManager
 from orac.client import Client
+from .errors import show_unknown_resource_error
 import orac
 
 
@@ -100,34 +101,76 @@ def ensure_client_initialized(interactive: bool = True):
 
 
 def interactive_provider_setup():
-    """Interactive provider setup with consent."""
-    print("Available providers:")
-    print("  • openrouter (recommended - access to multiple models)")
-    print("  • openai, google, anthropic, azure")
-    print()
-    
-    # Recommend OpenRouter for multi-provider access
-    default_provider = input("Which provider would you like to use? [openrouter]: ").strip().lower()
-    if not default_provider:
-        default_provider = "openrouter"
-    
-    try:
-        from orac.config import Provider
-        provider = Provider(default_provider)
-    except ValueError:
-        print(f"Unknown provider: {default_provider}")
-        print("Falling back to openrouter...")
-        provider = Provider.OPENROUTER
-    
+    """Interactive provider setup with auto-detection and consent."""
+    from orac.config import Provider, ConfigLoader
+
+    auth_manager = AuthManager()
+
+    # Auto-detect available API keys
+    detected = auth_manager.detect_available_providers()
+    available = [p for p, info in detected.items() if info["available"]]
+
+    if available:
+        print("\nOrac detected these API keys in your environment:")
+        for provider in available:
+            info = detected[provider]
+            status = "✓" if info["has_consent"] else " "
+            print(f"  {status} {info['env_var']}")
+        print()
+
+        # Get recommended provider
+        recommended = auth_manager.get_recommended_provider()
+        if recommended:
+            response = input(f"Use {recommended.value.title()} as default? [Y/n]: ").strip().lower()
+            if response in ("", "y", "yes"):
+                provider = recommended
+            else:
+                # Let user choose from available
+                print("\nAvailable providers:")
+                for i, p in enumerate(available, 1):
+                    print(f"  {i}. {p.value}")
+                choice = input(f"Select provider [1-{len(available)}]: ").strip()
+                try:
+                    idx = int(choice) - 1
+                    provider = available[idx]
+                except (ValueError, IndexError):
+                    provider = recommended
+        else:
+            provider = available[0]
+    else:
+        # No API keys detected
+        print("\nNo API keys detected in environment.")
+        print("Available providers: openrouter, openai, google, anthropic, azure")
+        print()
+        default_provider = input("Which provider would you like to use? [openrouter]: ").strip().lower()
+        if not default_provider:
+            default_provider = "openrouter"
+
+        try:
+            provider = Provider(default_provider)
+        except ValueError:
+            print(f"Unknown provider: {default_provider}")
+            print("Falling back to openrouter...")
+            provider = Provider.OPENROUTER
+
     try:
         # Initialize using orac.init() which handles consent
         client = orac.init(
             interactive=True,
             default_provider=provider
         )
+
+        # Save to user config
+        config_loader = ConfigLoader()
+        config_loader.save_user_config({
+            "provider": provider.value,
+            "model": Config.get_default_model_name(),
+        })
+
         print(f"✅ Successfully initialized with {provider.value}")
+        print(f"   Config saved to {config_loader.user_config_path}")
         return client
-        
+
     except Exception as e:
         print(f"❌ Failed to initialize: {e}")
         print("\n💡 You can also try:")
@@ -158,7 +201,7 @@ def main():
     )
     parser.add_argument(
         "--provider",
-        choices=["openai", "google", "anthropic", "azure", "openrouter", "custom"],
+        choices=["openai", "google", "anthropic", "azure", "openrouter", "z.ai", "cli", "custom"],
         help="Override LLM provider"
     )
     parser.add_argument(
@@ -183,8 +226,8 @@ def main():
     )
     
     # Import resource modules and set up parsers
-    from . import prompt, flow, skill, agent, team, chat, management
-    
+    from . import prompt, flow, skill, agent, team, chat, management, create, server
+
     # Add resource parsers
     prompt.add_prompt_parser(subparsers)
     flow.add_flow_parser(subparsers)
@@ -192,6 +235,8 @@ def main():
     agent.add_agent_parser(subparsers)
     team.add_team_parser(subparsers)
     chat.add_chat_parser(subparsers)
+    create.add_create_parser(subparsers)
+    server.add_server_parser(subparsers)
     management.add_config_parser(subparsers)
     management.add_auth_parser(subparsers)
     add_global_commands(subparsers)
@@ -227,12 +272,20 @@ def main():
         management.handle_config_commands(args, remaining)
     elif args.resource == 'auth':
         management.handle_auth_commands(args, remaining)
+    elif args.resource == 'create':
+        create.handle_create_commands(args, remaining)
+    elif args.resource == 'server':
+        server.handle_server_commands(args, remaining)
     elif args.resource in ['list', 'search']:
         handle_global_commands(args, remaining)
-    else:
+    elif args.resource is None:
         # No resource specified, show help
         parser.print_help()
         sys.exit(1)
+    else:
+        # Unknown resource - show helpful error with suggestions
+        valid_resources = ['prompt', 'flow', 'skill', 'agent', 'team', 'chat', 'create', 'server', 'config', 'auth', 'list', 'search']
+        show_unknown_resource_error(args.resource, valid_resources)
 
 
 def add_global_commands(subparsers):
@@ -281,7 +334,7 @@ def handle_shortcuts_and_parse(parser):
         elif first_arg == 'flow' and len(argv) > 1 and argv[1] not in ['run', 'list', 'show', 'graph', 'test']:
             argv = ['flow', 'run'] + argv[1:]
         # Legacy single-prompt mode (no resource specified)
-        elif first_arg not in ['prompt', 'flow', 'skill', 'agent', 'team', 'chat', 'config', 'auth', 'list', 'search'] and not first_arg.startswith('-'):
+        elif first_arg not in ['prompt', 'flow', 'skill', 'agent', 'team', 'chat', 'create', 'server', 'config', 'auth', 'list', 'search'] and not first_arg.startswith('-'):
             # Assume it's a prompt name - convert to new format
             argv = ['prompt', 'run'] + argv
     
@@ -312,29 +365,35 @@ def list_all_command():
     """List all prompts, flows, skills, agents and teams."""
     print("All Available Resources:")
     print("=" * 50)
-    
+
     # List prompts
     print("\nPROMPTS:")
     list_prompts_command(str(Config.get_prompts_dir()))
-    
+
     # List flows
     print("\nFLOWS:")
     list_flows_command(str(Config.get_flows_dir()))
-    
+
     # List skills
     print("\nSKILLS:")
-    from .skill import list_skills_command
-    list_skills_command(str(Config.get_skills_dir()))
-    
+    from .skill import _skill_command
+    class FakeArgs:
+        skills_dir = str(Config.get_skills_dir())
+    _skill_command.handle_list(FakeArgs(), [])
+
     # List agents
     print("\nAGENTS:")
-    from .agent import list_agents_command
-    list_agents_command(str(Config.get_agents_dir()))
-    
+    from .agent import _agent_command
+    class FakeAgentArgs:
+        agents_dir = str(Config.get_agents_dir())
+    _agent_command.handle_list(FakeAgentArgs(), [])
+
     # List teams
     print("\nTEAMS:")
-    from .team import list_teams_command
-    list_teams_command("orac/teams")
+    from .team import _team_command
+    class FakeTeamArgs:
+        teams_dir = "orac/teams"
+    _team_command.handle_list(FakeTeamArgs(), [])
 
 
 def list_prompts_command(prompts_dir: str):

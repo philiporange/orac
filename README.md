@@ -14,6 +14,7 @@
 * **Collaborative teams**: Multi-agent teams with leader orchestration for complex collaborative tasks.
 * **Skills system**: Executable Python skills with YAML specifications for custom functionality.
 * **Tool registry**: Unified interface for discovering and using prompts, flows, and skills as agent tools.
+* **HTTP API & Web UI**: Full REST API with Swagger docs and a modern web frontend for browser-based access.
 * **Hierarchical configuration**: Three-layer config system (base → prompt → runtime) with deep merging for flexible overrides.
 * **Templated inputs**: Use `${variable}` placeholders in prompt and system prompt fields.
 * **File support**: Attach local or remote files (e.g., images, documents) via `files:` or `file_urls:` in YAML or CLI flags.
@@ -152,6 +153,19 @@ orac chat interactive --conversation-id work  # Continue specific conversation
 orac chat list                          # List all conversations
 orac chat show work                     # Show conversation history
 orac chat delete work                   # Delete conversation
+```
+
+#### **Server** - HTTP API and Web UI
+```bash
+# Start the server
+orac server                             # Start on default port 8000
+orac server --port 8080                 # Start on custom port
+orac server --reload                    # Development mode with auto-reload
+
+# Access points when server is running:
+# - Web UI: http://localhost:8000/
+# - API: http://localhost:8000/api/
+# - Swagger docs: http://localhost:8000/docs
 ```
 
 #### **Configuration** - System management
@@ -503,6 +517,68 @@ client = orac.init(providers={
 
 ---
 
+## HTTP API
+
+Orac includes a full REST API server with a web frontend for browser-based access.
+
+### Starting the Server
+
+```bash
+orac server                    # Start on port 8000
+orac server --port 8080        # Custom port
+orac server --reload           # Auto-reload for development
+```
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/prompts` | GET | List all prompts |
+| `/api/prompts/{name}` | GET | Get prompt details |
+| `/api/prompts/{name}/run` | POST | Run a prompt |
+| `/api/flows` | GET | List all flows |
+| `/api/flows/{name}` | GET | Get flow details |
+| `/api/flows/{name}/run` | POST | Run a flow |
+| `/api/skills` | GET | List all skills |
+| `/api/skills/{name}/run` | POST | Run a skill |
+| `/api/agents` | GET | List all agents |
+| `/api/agents/{name}/run` | POST | Run an agent |
+| `/api/teams` | GET | List all teams |
+| `/api/teams/{name}/run` | POST | Run a team |
+| `/api/chat` | POST | Send chat message |
+| `/api/conversations` | GET | List conversations |
+| `/api/config` | GET | Get configuration |
+| `/api/providers` | GET | List available providers |
+
+### Example API Usage
+
+```bash
+# List all prompts
+curl http://localhost:8000/api/prompts
+
+# Run a prompt
+curl -X POST http://localhost:8000/api/prompts/capital/run \
+  -H "Content-Type: application/json" \
+  -d '{"parameters": {"country": "Japan"}}'
+
+# Send a chat message
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What is machine learning?"}'
+```
+
+### Web Frontend
+
+The server includes a Tailwind CSS styled web interface at the root URL (`/`). Features:
+- Browse and run prompts, flows, skills, agents, and teams
+- Interactive parameter input forms
+- Chat interface with conversation history
+- Configuration and provider status display
+
+Interactive API documentation is available at `/docs` (Swagger UI).
+
+---
+
 ## YAML Prompt Reference
 
 ### Basic YAML
@@ -731,15 +807,18 @@ orac/
 ├── __init__.py              # Package initialization
 ├── _meta.py                 # Project metadata
 ├── agent.py                 # Agent execution engine
+├── api.py                   # HTTP API server (FastAPI)
 ├── chat.py                  # Interactive chat interface
 ├── cli/                     # CLI implementation
 │   ├── __init__.py
 │   ├── agent.py            # Agent commands
 │   ├── chat.py             # Chat commands
+│   ├── create.py           # AI-powered resource creation
 │   ├── flow.py             # Flow commands
 │   ├── main.py             # Main CLI entry point
 │   ├── management.py       # Config/auth commands
 │   ├── prompt.py           # Prompt commands
+│   ├── server.py           # HTTP server commands
 │   ├── skill.py            # Skill commands
 │   └── utils.py            # CLI utilities
 ├── cli_progress.py         # CLI progress reporting
@@ -753,11 +832,14 @@ orac/
 ├── progress.py             # Progress tracking infrastructure
 ├── registry.py             # Tool registry for agents
 ├── skill.py                # Skills execution engine
+├── static/                  # Web frontend assets
+│   ├── index.html          # Main HTML page
+│   └── app.js              # Frontend JavaScript
 ├── agents/                 # Agent YAML definitions
 ├── flows/                  # Flow YAML definitions
 ├── prompts/                # Prompt YAML definitions
 ├── skills/                 # Skill implementations
-└── swarms/                 # Swarm configurations (future)
+└── teams/                  # Team YAML definitions
 ```
 
 ---

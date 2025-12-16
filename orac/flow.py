@@ -349,20 +349,46 @@ class Flow:
                     )
 
 
+def find_flow(name: str) -> Optional[Path]:
+    """Find a flow by name, searching all flow directories.
+
+    Args:
+        name: Flow name (without .yaml extension)
+
+    Returns:
+        Path to the flow file, or None if not found
+    """
+    from orac.config import Config
+    return Config.find_resource(name, 'flows')
+
+
 def load_flow(flow_path: Union[str, Path]) -> FlowSpec:
-    """Load and validate flow YAML file."""
+    """Load and validate flow YAML file.
+
+    Args:
+        flow_path: Path to flow file, or flow name to search for
+    """
     logger.debug(f"Loading flow from: {flow_path}")
-    
+
     flow_path = Path(flow_path)
+
+    # If path doesn't exist and doesn't look like a path, try to find by name
+    if not flow_path.exists() and not flow_path.suffix:
+        found = find_flow(str(flow_path))
+        if found:
+            flow_path = found
+        else:
+            raise FlowValidationError(f"Flow not found: {flow_path}")
+
     if not flow_path.exists():
         raise FlowValidationError(f"Flow file not found: {flow_path}")
-    
+
     try:
         with open(flow_path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
     except yaml.YAMLError as e:
         raise FlowValidationError(f"Invalid YAML in flow file: {e}")
-    
+
     return _parse_flow_data(data, flow_path)
 
 
@@ -428,23 +454,42 @@ def _parse_flow_data(data: Dict[str, Any], source_path: Path) -> FlowSpec:
         raise FlowValidationError(f"Failed to parse flow: {e}")
 
 
-def list_flows(flows_dir: Union[str, Path]) -> List[Dict[str, str]]:
-    """List available flows in the flows directory."""
-    flows_dir = Path(flows_dir)
+def list_flows(flows_dir: Union[str, Path, None] = None) -> List[Dict[str, str]]:
+    """List available flows from all flow directories.
+
+    Args:
+        flows_dir: Optional specific directory. If None, searches all directories.
+    """
+    from orac.config import Config
+
     flows = []
-    
-    if not flows_dir.exists():
-        return flows
-    
-    for yaml_file in flows_dir.glob("*.yaml"):
-        try:
-            spec = load_flow(yaml_file)
-            flows.append({
-                'name': yaml_file.stem,
-                'description': spec.description,
-                'path': str(yaml_file)
-            })
-        except Exception as e:
-            logger.warning(f"Failed to load flow {yaml_file}: {e}")
+    seen_names = set()
+
+    # Get directories to search
+    if flows_dir:
+        dirs = [Path(flows_dir)]
+    else:
+        dirs = Config.get_flows_dirs()
+
+    for directory in dirs:
+        if not directory.exists():
+            continue
+
+        for yaml_file in directory.glob("*.yaml"):
+            name = yaml_file.stem
+            # Skip if already seen (higher priority directory wins)
+            if name in seen_names:
+                continue
+            seen_names.add(name)
+
+            try:
+                spec = load_flow(yaml_file)
+                flows.append({
+                    'name': name,
+                    'description': spec.description,
+                    'path': str(yaml_file)
+                })
+            except Exception as e:
+                logger.warning(f"Failed to load flow {yaml_file}: {e}")
     
     return flows

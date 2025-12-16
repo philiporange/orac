@@ -199,19 +199,36 @@ class Prompt:
         # Store runtime provider parameter for later processing
         self._runtime_provider = provider
 
-        # 1. Load base config
+        # 1. Load layered config: user config -> project config -> package config
+        from orac.config import ConfigLoader
+        self._config_loader = ConfigLoader()
+
+        # Package-level base config (orac/config.yaml)
         config_path = base_config_file or str(Config.get_config_file())
-        base_config = self._load_yaml_file(config_path, silent_not_found=True)
+        package_config = self._load_yaml_file(config_path, silent_not_found=True)
+
+        # Merge: user/project config (from ConfigLoader) -> package config
+        base_config = _deep_merge_dicts(
+            self._config_loader._merged_config,
+            package_config
+        )
 
         # 2. Load prompt-specific config
         if self.yaml_file_path is None:
-            self.yaml_file_path = os.path.join(
-                self.prompts_root_dir, f"{self.prompt_name}.yaml"
-            )
+            # Search all prompt directories (project > user > package)
+            found_path = Config.find_resource(self.prompt_name, 'prompts')
+            if found_path:
+                self.yaml_file_path = str(found_path)
+                self.prompts_root_dir = str(found_path.parent)
+            else:
+                # Fall back to explicit prompts_dir if provided
+                self.yaml_file_path = os.path.join(
+                    self.prompts_root_dir, f"{self.prompt_name}.yaml"
+                )
         prompt_config = self._load_yaml_file(self.yaml_file_path)
         self.yaml_base_dir = os.path.dirname(os.path.abspath(self.yaml_file_path))
 
-        # 3. Deep merge
+        # 3. Deep merge (prompt config overrides base config)
         self.config = _deep_merge_dicts(base_config, prompt_config)
         self._parse_and_validate_config()
         
@@ -496,6 +513,7 @@ class Prompt:
         message_history: Optional[List[Dict[str, Any]]] = None,
         model_name: Optional[str] = None,
         api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         file_urls: Optional[List[str]] = None,
         provider: Optional[str | Provider] = None,
@@ -594,8 +612,12 @@ class Prompt:
             if provider is not None:
                 runtime_provider = Provider(provider) if isinstance(provider, str) else provider
 
-            # If base_url or api_key is specified in YAML, update provider configuration
-            if (self.base_url or self.api_key) and runtime_provider:
+            # Runtime api_key and base_url take precedence over YAML
+            effective_api_key = api_key if api_key else self.api_key
+            effective_base_url = base_url if base_url else self.base_url
+
+            # If base_url or api_key is specified, update provider configuration
+            if (effective_base_url or effective_api_key) and runtime_provider:
                 # Get the provider registry from client
                 registry = self.client.get_provider_registry()
 
@@ -603,17 +625,18 @@ class Prompt:
                 provider_info = registry.get_provider_info(runtime_provider)
                 needs_update = (
                     not provider_info or
-                    (self.base_url and provider_info.get('base_url') != self.base_url)
+                    (effective_base_url and provider_info.get('base_url') != effective_base_url) or
+                    effective_api_key  # Always update if runtime api_key provided
                 )
 
                 if needs_update:
                     # Update provider with custom base_url and/or api_key
                     # Note: This requires re-adding the provider, which will update its configuration
                     try:
-                        # Determine which API key to use (YAML takes precedence if provided)
-                        if self.api_key:
-                            api_key_to_use = self.api_key
-                            logger.debug(f"Using API key from YAML for provider {runtime_provider.value}")
+                        # Determine which API key to use (runtime takes precedence)
+                        if effective_api_key:
+                            api_key_to_use = effective_api_key
+                            logger.debug(f"Using API key for provider {runtime_provider.value}")
                         else:
                             # Get API key from existing registration or auth manager
                             auth_manager = self.client.get_auth_manager()
@@ -627,16 +650,16 @@ class Prompt:
                         self.client.add_provider(
                             runtime_provider,
                             api_key=api_key_to_use,
-                            base_url=self.base_url,
+                            base_url=effective_base_url,
                             model_name=self.model_name_override
                         )
 
-                        if self.base_url and self.api_key:
-                            logger.info(f"Updated provider {runtime_provider.value} with custom base_url and api_key from YAML")
-                        elif self.base_url:
-                            logger.info(f"Updated provider {runtime_provider.value} with custom base_url: {self.base_url}")
-                        elif self.api_key:
-                            logger.info(f"Updated provider {runtime_provider.value} with custom api_key from YAML")
+                        if effective_base_url and effective_api_key:
+                            logger.info(f"Updated provider {runtime_provider.value} with custom base_url and api_key")
+                        elif effective_base_url:
+                            logger.info(f"Updated provider {runtime_provider.value} with custom base_url: {effective_base_url}")
+                        elif effective_api_key:
+                            logger.info(f"Updated provider {runtime_provider.value} with custom api_key")
                     except Exception as e:
                         logger.warning(f"Could not update provider configuration: {e}. Using defaults.")
 
@@ -688,6 +711,7 @@ class Prompt:
         message_history: Optional[List[Dict[str, Any]]] = None,
         model_name: Optional[str] = None,
         api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         file_urls: Optional[List[str]] = None,
         provider: Optional[str | Provider] = None,
@@ -698,6 +722,7 @@ class Prompt:
             message_history=message_history,
             model_name=model_name,
             api_key=api_key,
+            base_url=base_url,
             generation_config=generation_config,
             file_urls=file_urls,
             provider=provider,
@@ -710,6 +735,7 @@ class Prompt:
         message_history: Optional[List[Dict[str, Any]]] = None,
         model_name: Optional[str] = None,
         api_key: Optional[str] = None,
+        base_url: Optional[str] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         file_urls: Optional[List[str]] = None,
         provider: Optional[str | Provider] = None,
@@ -718,14 +744,14 @@ class Prompt:
     ) -> str | dict:
         """
         Sophisticated wrapper around completion that automatically detects and parses JSON responses.
-        
+
         Args:
             force_json: If True, raises an error if response isn't valid JSON
             **kwargs: All other arguments passed to completion()
-            
+
         Returns:
             dict if response is valid JSON, str otherwise
-            
+
         Raises:
             ValueError: If force_json=True and response is not valid JSON
         """
@@ -733,6 +759,7 @@ class Prompt:
             message_history=message_history,
             model_name=model_name,
             api_key=api_key,
+            base_url=base_url,
             generation_config=generation_config,
             file_urls=file_urls,
             provider=provider,

@@ -70,7 +70,7 @@ class Skill:
     def __init__(self, skill_spec: SkillSpec, skills_dir: str = None,
                  progress_callback: Optional[ProgressCallback] = None):
         self.spec = skill_spec
-        self.skills_dir = Path(skills_dir or Config.DEFAULT_SKILLS_DIR)
+        self.skills_dir = Path(skills_dir) if skills_dir else Config.get_skills_dir()
         self.progress_callback = progress_callback
         self.skill_module = None
 
@@ -257,9 +257,34 @@ print(json.dumps(result))
                 )
 
 
+def find_skill(name: str) -> Optional[Path]:
+    """Find a skill by name, searching all skill directories.
+
+    Args:
+        name: Skill name (without .yaml extension)
+
+    Returns:
+        Path to the skill file, or None if not found
+    """
+    from orac.config import Config
+    return Config.find_resource(name, 'skills')
+
+
 def load_skill(skill_path: Union[str, Path]) -> SkillSpec:
-    """Load and validate skill YAML file."""
+    """Load and validate skill YAML file.
+
+    Args:
+        skill_path: Path to skill file, or skill name to search for
+    """
     skill_path = Path(skill_path)
+
+    # If path doesn't exist and doesn't look like a path, try to find by name
+    if not skill_path.exists() and not skill_path.suffix:
+        found = find_skill(str(skill_path))
+        if found:
+            skill_path = found
+        else:
+            raise SkillValidationError(f"Skill not found: {skill_path}")
 
     if not skill_path.exists():
         raise SkillValidationError(f"Skill file not found: {skill_path}")
@@ -306,29 +331,48 @@ def _parse_skill_data(data: Dict[str, Any]) -> SkillSpec:
     )
 
 
-def list_skills(skills_dir: Union[str, Path]) -> List[Dict[str, str]]:
-    """List available skills in the skills directory."""
-    skills_dir = Path(skills_dir)
+def list_skills(skills_dir: Union[str, Path, None] = None) -> List[Dict[str, str]]:
+    """List available skills from all skill directories.
+
+    Args:
+        skills_dir: Optional specific directory. If None, searches all directories.
+    """
+    from orac.config import Config
+
     skills = []
+    seen_names = set()
 
-    if not skills_dir.exists():
-        return skills
+    # Get directories to search
+    if skills_dir:
+        dirs = [Path(skills_dir)]
+    else:
+        dirs = Config.get_skills_dirs()
 
-    for yaml_file in skills_dir.glob("*.yaml"):
-        # Skip if no corresponding .py file
-        py_file = yaml_file.with_suffix('.py')
-        if not py_file.exists():
+    for directory in dirs:
+        if not directory.exists():
             continue
 
-        try:
-            spec = load_skill(yaml_file)
-            skills.append({
-                'name': spec.name,
-                'description': spec.description,
-                'version': spec.version,
-                'path': str(yaml_file)
-            })
-        except Exception as e:
-            logger.warning(f"Failed to load skill {yaml_file}: {e}")
+        for yaml_file in directory.glob("*.yaml"):
+            # Skip if no corresponding .py file
+            py_file = yaml_file.with_suffix('.py')
+            if not py_file.exists():
+                continue
+
+            name = yaml_file.stem
+            # Skip if already seen (higher priority directory wins)
+            if name in seen_names:
+                continue
+            seen_names.add(name)
+
+            try:
+                spec = load_skill(yaml_file)
+                skills.append({
+                    'name': spec.name,
+                    'description': spec.description,
+                    'version': spec.version,
+                    'path': str(yaml_file)
+                })
+            except Exception as e:
+                logger.warning(f"Failed to load skill {yaml_file}: {e}")
 
     return skills
