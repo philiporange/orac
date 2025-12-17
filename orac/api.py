@@ -159,10 +159,25 @@ def get_client():
         if orac.is_initialized():
             _client = orac.get_client()
         else:
-            # Try to initialize with consented providers
+            # Try to initialize with all consented providers that have API keys
             consented = _auth_manager.get_consented_providers()
-            if consented:
-                _client = orac.init(default_provider=consented[0])
+            detected = _auth_manager.detect_available_providers()
+
+            # Build providers dict for all consented providers with available API keys
+            providers_to_init = {}
+            default_provider = None
+
+            for provider in consented:
+                if provider in detected and detected[provider].get("available"):
+                    providers_to_init[provider] = {"allow_env": True}
+                    if default_provider is None:
+                        default_provider = provider
+
+            if providers_to_init and default_provider:
+                _client = orac.init(
+                    default_provider=default_provider,
+                    providers=providers_to_init
+                )
             else:
                 # Initialize without providers - will fail on API calls
                 _client = None
@@ -517,7 +532,7 @@ async def list_teams_endpoint():
                 name=name,
                 description=team_data.get('description', ''),
                 inputs=team_data.get('inputs', []),
-                agents=[a.get('name', '') for a in team_data.get('agents', [])]
+                agents=team_data.get('agents', [])  # agents is already List[str]
             ))
 
     return sorted(teams, key=lambda t: t.name)
@@ -563,13 +578,12 @@ async def chat(request: ChatRequest):
         db = ConversationDB()
 
         if request.conversation_id:
-            conversation = db.get_conversation(request.conversation_id)
-            if not conversation:
+            if not db.conversation_exists(request.conversation_id):
                 raise HTTPException(status_code=404, detail="Conversation not found")
             history = db.get_messages(request.conversation_id)
         else:
-            # Create new conversation
-            conv_id = db.create_conversation(title=request.message[:50])
+            # Create new conversation - use message prefix as prompt_name
+            conv_id = db.create_conversation(prompt_name=request.message[:50])
             history = []
             request.conversation_id = conv_id
 
@@ -625,7 +639,7 @@ async def list_conversations():
     return [
         ConversationInfo(
             id=c["id"],
-            title=c["title"],
+            title=c.get("prompt_name", "Untitled"),  # DB uses prompt_name as title
             created_at=c["created_at"],
             message_count=c.get("message_count", 0)
         )
@@ -644,7 +658,7 @@ async def get_conversation(conv_id: str):
     messages = db.get_messages(conv_id)
     return {
         "id": conv_id,
-        "title": conversation.get("title", ""),
+        "title": conversation.get("prompt_name", ""),
         "messages": messages
     }
 
@@ -665,11 +679,10 @@ async def delete_conversation(conv_id: str):
 async def get_config():
     """Get current configuration."""
     loader = ConfigLoader()
-    config = loader.get_merged_config()
 
     return ConfigInfo(
-        provider=config.get("provider"),
-        model=config.get("model"),
+        provider=loader.get_provider().value if loader.get_provider() else None,
+        model=loader.get_model(),
         prompts_dirs=[str(p) for p in Config.get_prompts_dirs()],
         flows_dirs=[str(p) for p in Config.get_flows_dirs()],
         skills_dirs=[str(p) for p in Config.get_skills_dirs()],

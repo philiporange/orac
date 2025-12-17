@@ -225,3 +225,33 @@ class ConversationDB:
                 (conversation_id,)
             )
             return cursor.fetchone() is not None
+
+    def get_conversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
+        """Get a specific conversation by ID.
+
+        Args:
+            conversation_id: The conversation ID to retrieve.
+
+        Returns:
+            Conversation metadata dict, or None if not found.
+        """
+        with self._get_connection() as conn:
+            cursor = conn.execute("""
+                SELECT c.id, c.prompt_name, c.created_at, c.updated_at,
+                       COUNT(m.id) as message_count
+                FROM conversations c
+                LEFT JOIN messages m ON c.id = m.conversation_id
+                WHERE c.id = ?
+                GROUP BY c.id
+            """, (conversation_id,))
+
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "id": row["id"],
+                    "prompt_name": row["prompt_name"],
+                    "created_at": row["created_at"],
+                    "updated_at": row["updated_at"],
+                    "message_count": row["message_count"]
+                }
+            return None

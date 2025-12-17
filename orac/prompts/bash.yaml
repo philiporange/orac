@@ -1,6 +1,6 @@
 description: "Convert natural language descriptions into precise bash commands"
 provider: "google"
-model_name: "gemini-2.5-flash"
+model_name: "gemini-3-flash-preview"
 generation_config:
     temperature: 0
 system_prompt: |

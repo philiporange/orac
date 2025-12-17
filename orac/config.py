@@ -109,7 +109,7 @@ class Config:
     # ------------------------------------------------------------------ #
     # LLM-client defaults                                                #
     # ------------------------------------------------------------------ #
-    _DEFAULT_MODEL_NAME: Final[str] = "gemini-2.5-flash-lite"
+    _DEFAULT_MODEL_NAME: Final[str] = "gemini-3-flash-preview"
 
     # ------------------------------------------------------------------ #
     # LLM-wrapper helpers                                                #
@@ -268,6 +268,27 @@ class Config:
         if user_agents.exists():
             dirs.append(user_agents)
         dirs.append(cls.get_agents_dir())
+        return dirs
+
+    @classmethod
+    def get_teams_dir(cls) -> Path:
+        """Get primary teams directory from environment or use default."""
+        return Path(os.getenv("ORAC_DEFAULT_TEAMS_DIR", cls.PACKAGE_DIR / "teams"))
+
+    @classmethod
+    def get_teams_dirs(cls, project_dir: Optional[Path] = None) -> list[Path]:
+        """Get all teams directories in search order (highest priority first)."""
+        dirs = []
+        if project_dir:
+            project_teams = project_dir / ".orac" / "teams"
+        else:
+            project_teams = Path.cwd() / ".orac" / "teams"
+        if project_teams.exists():
+            dirs.append(project_teams)
+        user_teams = cls._USER_CONFIG_DIR / "teams"
+        if user_teams.exists():
+            dirs.append(user_teams)
+        dirs.append(cls.get_teams_dir())
         return dirs
 
     @classmethod
