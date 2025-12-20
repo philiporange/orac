@@ -1,0 +1,64 @@
+name: code
+description: "Execute a coding task using an autonomous coding agent (Claude Code by default)"
+version: "1.1.0"
+
+inputs:
+  - name: prompt
+    type: string
+    description: "The coding task or prompt to execute"
+    required: true
+
+  - name: working_directory
+    type: string
+    description: "Working directory for the coding agent. Defaults to a new temporary folder."
+    required: false
+
+  - name: agent
+    type: string
+    description: "The coding agent to use (claude_code, codex, aider, goose)"
+    default: "claude_code"
+    required: false
+
+  - name: model
+    type: string
+    description: "The model to use (e.g. opus, sonnet, o3, gpt-4o)"
+    default: "opus"
+    required: false
+
+  - name: system
+    type: string
+    description: "Optional system prompt to override the agent's default"
+    required: false
+
+  - name: system_addendum
+    type: string
+    description: "Text to append to the agent's default system prompt"
+    required: false
+
+  - name: api_endpoint
+    type: string
+    description: "Custom API endpoint URL (for using alternative providers like z.ai)"
+    required: false
+
+  - name: api_key
+    type: string
+    description: "API key for the endpoint (overrides environment default)"
+    required: false
+
+outputs:
+  - name: result
+    type: string
+    description: "The output from the coding agent"
+
+  - name: working_directory
+    type: string
+    description: "The working directory used (useful when auto-generated)"
+
+metadata:
+  author: "Philip Orange <git@philiporange.com>"
+  tags: ["code", "agent", "autonomous", "development"]
+
+security:
+  timeout: 600
+  allow_network: true
+  allow_filesystem: true

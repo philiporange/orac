@@ -1,0 +1,63 @@
+name: test
+description: "Run tests against requirements using a coding agent, returning PASS/FAIL results"
+version: "1.0.0"
+
+inputs:
+  - name: requirements
+    type: list
+    description: "List of requirements/test cases to verify"
+    required: true
+
+  - name: working_directory
+    type: string
+    description: "Working directory containing the code to test"
+    required: true
+
+  - name: context
+    type: string
+    description: "Additional context about what is being tested"
+    required: false
+
+  - name: agent
+    type: string
+    description: "The coding agent to use (claude_code, codex, aider, goose)"
+    default: "claude_code"
+    required: false
+
+  - name: model
+    type: string
+    description: "The model to use for the coding agent"
+    default: "sonnet"
+    required: false
+
+  - name: api_endpoint
+    type: string
+    description: "Custom API endpoint URL"
+    required: false
+
+  - name: api_key
+    type: string
+    description: "API key for the endpoint"
+    required: false
+
+outputs:
+  - name: results
+    type: array
+    description: "Test results with status and optional info"
+
+  - name: summary
+    type: object
+    description: "Summary with passed/failed/total counts"
+
+  - name: all_passed
+    type: boolean
+    description: "Whether all tests passed"
+
+metadata:
+  author: "Philip Orange <git@philiporange.com>"
+  tags: ["test", "verification", "qa", "agent"]
+
+security:
+  timeout: 600
+  allow_network: true
+  allow_filesystem: true

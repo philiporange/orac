@@ -1,0 +1,47 @@
+name: todo
+description: "Manage a markdown-based todo list for tracking agent/team goals"
+version: "1.0.0"
+
+inputs:
+  - name: action
+    type: string
+    description: "Action to perform: create, read, update, delete, mark_complete, create_immutable, get_next, list_remaining"
+    required: true
+
+  - name: file
+    type: string
+    description: "Path to the markdown todo file"
+    default: "/tmp/orac_todo.md"
+    required: false
+
+  - name: id
+    type: int
+    description: "Todo item ID (required for read, update, delete, mark_complete)"
+    required: false
+
+  - name: description
+    type: string
+    description: "Todo item description (required for create, create_immutable, update)"
+    required: false
+
+outputs:
+  - name: result
+    type: string
+    description: "Result message or item content"
+
+  - name: item
+    type: object
+    description: "The todo item (for single-item operations)"
+
+  - name: items
+    type: array
+    description: "List of todo items (for list operations)"
+
+metadata:
+  author: "Philip Orange <git@philiporange.com>"
+  tags: ["todo", "task", "management", "agent"]
+
+security:
+  timeout: 10
+  allow_network: false
+  allow_filesystem: true
