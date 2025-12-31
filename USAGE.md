@@ -606,6 +606,70 @@ Supported file types depend on the LLM provider:
 - **Documents**: PDF (Google Gemini, some others)
 - **Text**: Plain text, code files (most providers)
 
+### Generation Configuration
+
+The `generation_config` field in prompt YAML files allows you to control model generation parameters like temperature, max tokens, and other provider-specific settings.
+
+#### Setting Generation Parameters in YAML
+
+```yaml
+# prompts/creative_writer.yaml
+prompt: "Write a story about ${topic}"
+provider: openrouter
+model_name: openai/gpt-4o
+
+generation_config:
+  max_tokens: 16000      # Maximum output tokens
+  temperature: 0.9       # Higher = more creative
+  top_p: 0.95           # Nucleus sampling
+  frequency_penalty: 0.5 # Reduce repetition
+```
+
+#### Common Generation Parameters
+
+| Parameter | Description | Typical Range |
+|-----------|-------------|---------------|
+| `max_tokens` | Maximum number of tokens in the response | 100 - 128000 |
+| `temperature` | Controls randomness (higher = more random) | 0.0 - 2.0 |
+| `top_p` | Nucleus sampling threshold | 0.0 - 1.0 |
+| `top_k` | Top-k sampling (if supported) | 1 - 100 |
+| `frequency_penalty` | Penalize repeated tokens | -2.0 - 2.0 |
+| `presence_penalty` | Penalize tokens based on presence | -2.0 - 2.0 |
+| `stop` | Stop sequences (list of strings) | - |
+
+#### Example: Long-form Content Generation
+
+For prompts that generate long outputs (e.g., albums, documents), increase `max_tokens`:
+
+```yaml
+# prompts/album_generator.yaml
+prompt: "Design a ${track_count}-track album concept for: ${description}"
+provider: openrouter
+model_name: openai/gpt-4o
+response_mime_type: application/json
+
+generation_config:
+  max_tokens: 16000  # Ensure enough space for full response
+
+parameters:
+  - name: description
+    type: string
+  - name: track_count
+    type: integer
+    default: 5
+```
+
+#### Overriding at Runtime
+
+You can override generation config when calling the prompt programmatically:
+
+```python
+from orac import Prompt
+
+prompt = Prompt("writer", generation_config={"temperature": 0.2})
+result = prompt(topic="science fiction")
+```
+
 ### Conversation Management
 
 The `Prompt` class integrates with `ConversationDB` to manage multi-turn interactions.
