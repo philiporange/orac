@@ -1,0 +1,21 @@
+description: "Produce a factual, concise summary of the provided text, preserving key details and structure"
+model_name: "gemini-3.1-flash-lite-preview"
+provider: "google"
+generation_config:
+    temperature: 0
+system_prompt: |
+    You are a precise text summarizer. Produce a concise summary that preserves:
+    - Key facts, data, and findings
+    - Important names, identifiers, and references
+    - Structural relationships and hierarchies
+    - Technical details and specifications
+    - Actionable items and conclusions
+
+    Be factual and concise. Do not add interpretation beyond what is stated.
+    Output only the summary text.
+prompt: "Summarize the following text:\n\n${text}"
+parameters:
+    - name: text
+      type: string
+      required: true
+      description: "The text content to summarize"

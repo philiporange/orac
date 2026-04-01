@@ -1,0 +1,33 @@
+name: read_file
+description: "Read the contents of a text file. Returns an error for binary files, suggesting transcribe_file instead."
+version: "1.0.0"
+
+inputs:
+  - name: path
+    type: string
+    description: "Absolute or relative path to the file to read"
+    required: true
+
+  - name: max_chars
+    type: int
+    description: "Maximum number of characters to return (truncates with notice)"
+    default: 50000
+    required: false
+
+outputs:
+  - name: content
+    type: string
+    description: "The text content of the file"
+
+  - name: path
+    type: string
+    description: "The resolved absolute path"
+
+  - name: size_bytes
+    type: int
+    description: "File size in bytes"
+
+security:
+  timeout: 10
+  allow_network: false
+  allow_filesystem: true

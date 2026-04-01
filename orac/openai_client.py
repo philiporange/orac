@@ -8,7 +8,8 @@ from __future__ import annotations
 
 import os
 import base64
-from typing import List, Dict, Optional, Any
+from dataclasses import dataclass, field
+from typing import List, Dict, Optional, Any, Union
 from loguru import logger
 from openai import OpenAI
 
@@ -19,6 +20,85 @@ from orac.config import Config, Provider
 from .providers import ProviderRegistry
 
 # Note: DEFAULT_MODEL_NAME now comes from Config.get_default_model_name()
+
+
+# ---------------------------------------------------------------------#
+# Usage / cost tracking                                                #
+# ---------------------------------------------------------------------#
+
+# Per-token pricing (USD) for common models.  Keys are matched against
+# the *resolved* model name sent to the API.  Prices are per-token
+# (NOT per-1K tokens) so we can simply multiply.
+# fmt: off
+MODEL_PRICING: Dict[str, Dict[str, float]] = {
+    # OpenAI
+    "gpt-4o":             {"input": 2.50e-6, "output": 10.00e-6},
+    "gpt-4o-mini":        {"input": 0.15e-6, "output": 0.60e-6},
+    "gpt-4.1":            {"input": 2.00e-6, "output": 8.00e-6},
+    "gpt-4.1-mini":       {"input": 0.40e-6, "output": 1.60e-6},
+    "gpt-4.1-nano":       {"input": 0.10e-6, "output": 0.40e-6},
+    "o3":                 {"input": 2.00e-6, "output": 8.00e-6},
+    "o3-mini":            {"input": 1.10e-6, "output": 4.40e-6},
+    "o4-mini":            {"input": 1.10e-6, "output": 4.40e-6},
+    # Anthropic
+    "claude-sonnet-4-6":  {"input": 3.00e-6, "output": 15.00e-6},
+    "claude-opus-4-6":    {"input": 15.00e-6, "output": 75.00e-6},
+    "claude-haiku-4-5":   {"input": 0.80e-6, "output": 4.00e-6},
+    # Google
+    "gemini-2.5-pro":     {"input": 1.25e-6, "output": 10.00e-6},
+    "gemini-2.5-flash":   {"input": 0.15e-6, "output": 0.60e-6},
+    "gemini-2.0-flash":   {"input": 0.10e-6, "output": 0.40e-6},
+}
+# fmt: on
+
+
+def _lookup_pricing(model_name: str) -> Optional[Dict[str, float]]:
+    """Find pricing for *model_name*, trying prefix matches for versioned names."""
+    if model_name in MODEL_PRICING:
+        return MODEL_PRICING[model_name]
+    # Try prefix match (e.g. "gpt-4o-2024-08-06" → "gpt-4o")
+    for key in sorted(MODEL_PRICING, key=len, reverse=True):
+        if model_name.startswith(key):
+            return MODEL_PRICING[key]
+    return None
+
+
+@dataclass
+class Usage:
+    """Token usage and optional cost for a single API call."""
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    model: str = ""
+    cost: Optional[float] = None
+
+    def __add__(self, other: "Usage") -> "Usage":
+        """Accumulate usage across multiple calls."""
+        combined_cost: Optional[float] = None
+        if self.cost is not None and other.cost is not None:
+            combined_cost = self.cost + other.cost
+        elif self.cost is not None:
+            combined_cost = self.cost
+        elif other.cost is not None:
+            combined_cost = other.cost
+        return Usage(
+            prompt_tokens=self.prompt_tokens + other.prompt_tokens,
+            completion_tokens=self.completion_tokens + other.completion_tokens,
+            total_tokens=self.total_tokens + other.total_tokens,
+            model=other.model or self.model,
+            cost=combined_cost,
+        )
+
+
+@dataclass
+class CompletionResult:
+    """Wraps an LLM response with optional usage/cost metadata."""
+    text: str
+    usage: Optional[Usage] = None
+
+    # Allow transparent use as a string in most contexts
+    def __str__(self) -> str:
+        return self.text
 
 
 # ---------------------------------------------------------------------#
@@ -123,17 +203,17 @@ def call_api(
     system_prompt: Optional[str] = None,
     model_name: Optional[str] = None,  # Use provider's model if None
     generation_config: Optional[Dict[str, Any]] = None,
-) -> str:
+) -> CompletionResult:
     """
     Call LLM API using provider registry.
     Supports:
       • chat history + system prompt
       • generation_config passthrough (temperature, max_tokens, etc.)
       • optional file upload (images/docs) via base64 encoding
-      • returns `str` with the model's top choice
+      • returns `CompletionResult` with the model's top choice and usage data
     """
     client = provider_registry.get_client(provider)
-    
+
     # Get model name from registry if not specified
     resolved_model_name = model_name or provider_registry.get_model_name(provider)
 
@@ -169,9 +249,35 @@ def call_api(
         raise
 
     # -----------------------------------------------------------------#
-    # Return text                                                      #
+    # Extract text and usage                                           #
     # -----------------------------------------------------------------#
     choice = response.choices[0]
     content = getattr(choice.message, "content", "")
-    logger.info("LLM completion successful")
-    return content
+
+    usage: Optional[Usage] = None
+    if getattr(response, "usage", None) is not None:
+        ru = response.usage
+        prompt_tokens = getattr(ru, "prompt_tokens", 0) or 0
+        completion_tokens = getattr(ru, "completion_tokens", 0) or 0
+        total_tokens = getattr(ru, "total_tokens", 0) or (prompt_tokens + completion_tokens)
+
+        cost: Optional[float] = None
+        pricing = _lookup_pricing(resolved_model_name)
+        if pricing:
+            cost = (prompt_tokens * pricing["input"]) + (completion_tokens * pricing["output"])
+
+        usage = Usage(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            model=resolved_model_name,
+            cost=cost,
+        )
+        logger.info(
+            f"LLM completion successful — {total_tokens} tokens"
+            + (f" (${cost:.6f})" if cost is not None else "")
+        )
+    else:
+        logger.info("LLM completion successful")
+
+    return CompletionResult(text=content, usage=usage)

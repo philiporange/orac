@@ -14,6 +14,7 @@ from .prompt import Prompt
 from .flow import Flow
 from .agent import Agent
 from .skill import Skill
+from .openai_client import CompletionResult, Usage, MODEL_PRICING
 
 
 # Global client instance for convenience
@@ -122,17 +123,22 @@ def reset() -> None:
 # Export main classes and types
 __all__ = [
     # Main classes
-    "Prompt", 
-    "Flow", 
-    "Agent", 
-    "Skill", 
+    "Prompt",
+    "Flow",
+    "Agent",
+    "Skill",
     "Client",
     "AuthManager",
     "Provider",
-    
+
+    # Usage / cost tracking
+    "CompletionResult",
+    "Usage",
+    "MODEL_PRICING",
+
     # Package-level functions
     "init",
-    "quick_init", 
+    "quick_init",
     "get_client",
     "is_initialized",
     "reset",

@@ -670,6 +670,151 @@ prompt = Prompt("writer", generation_config={"temperature": 0.2})
 result = prompt(topic="science fiction")
 ```
 
+### Usage & Cost Tracking
+
+Orac can optionally report token usage and estimated cost for API calls. This is available at every level of the Python API: `Client`, `Prompt`, `Flow`, and `Agent`.
+
+Usage tracking is **opt-in** — pass `include_usage=True` to any completion method. When enabled, the method returns a `CompletionResult` object instead of a plain string.
+
+#### `CompletionResult` and `Usage`
+
+```python
+from orac import CompletionResult, Usage
+
+# CompletionResult fields:
+#   .text   — the LLM response (str, or dict for JSON methods)
+#   .usage  — Usage object or None
+
+# Usage fields:
+#   .prompt_tokens      — input tokens
+#   .completion_tokens  — output tokens
+#   .total_tokens       — total tokens
+#   .model              — model name used
+#   .cost               — estimated cost in USD (None if model not in pricing table)
+```
+
+#### Tracking Usage with Prompts
+
+```python
+import orac
+from orac import Prompt
+
+# Without include_usage (default) — returns str as usual
+result = prompt.completion(country="Japan")
+print(result)  # "Tokyo"
+
+# With include_usage — returns CompletionResult
+result = prompt.completion(country="Japan", include_usage=True)
+print(result.text)                 # "Tokyo"
+print(result.usage.prompt_tokens)  # 12
+print(result.usage.completion_tokens)  # 1
+print(result.usage.total_tokens)   # 13
+print(result.usage.model)          # "gemini-2.5-flash"
+print(result.usage.cost)           # 0.000002
+
+# Also works with __call__ and completion_as_json
+result = prompt(dish="tacos", include_usage=True)
+print(result.text)   # {"title": "Tacos", ...} (dict if JSON detected)
+print(result.usage.cost)
+
+result = prompt.completion_as_json(dish="pizza", include_usage=True)
+print(result.text)   # parsed dict
+print(result.usage.cost)
+```
+
+#### Tracking Usage with Client
+
+```python
+import orac
+from orac.config import Provider
+
+client = orac.get_client()
+
+result = client.completion("What is 2+2?", include_usage=True)
+print(result.text)        # "4"
+print(result.usage.cost)  # 0.000001
+
+result = client.chat(
+    message_history=[{"role": "user", "text": "Hello"}],
+    include_usage=True
+)
+print(result.usage.total_tokens)
+```
+
+#### Tracking Usage with Flows
+
+Flows accumulate usage across all steps. Pass `include_usage=True` to `execute()` and the returned output dict will include a `_usage` key with aggregate totals:
+
+```python
+from orac import Flow
+from orac.flow import load_flow
+
+flow_spec = load_flow("flows/research_assistant.yaml")
+engine = Flow(flow_spec, prompts_dir="prompts")
+
+results = engine.execute({"topic": "AI ethics"}, include_usage=True)
+
+# Normal outputs
+print(results["summary"])
+
+# Aggregate usage across all steps
+print(results["_usage"]["total_tokens"])  # 1523
+print(results["_usage"]["cost"])          # 0.001420
+```
+
+You can also access `engine.total_usage` directly after execution for the `Usage` object.
+
+#### Tracking Usage with Agents
+
+Agents accumulate usage across all LLM iterations in their ReAct loop:
+
+```python
+from orac import Agent
+
+result = agent.run(include_usage=True, topic="quantum computing")
+print(result.text)                 # final answer
+print(result.usage.total_tokens)   # total across all iterations
+print(result.usage.cost)           # total cost
+```
+
+The `agent.total_usage` attribute is also available after `run()` completes.
+
+#### Built-in Model Pricing
+
+Orac includes a built-in pricing table (`orac.MODEL_PRICING`) for common models from OpenAI, Anthropic, and Google. Costs are calculated automatically when the model is recognized.
+
+```python
+import orac
+
+# View supported models
+for model, prices in orac.MODEL_PRICING.items():
+    print(f"{model}: ${prices['input']*1e6:.2f}/M input, ${prices['output']*1e6:.2f}/M output")
+
+# Add custom pricing
+orac.MODEL_PRICING["my-custom-model"] = {
+    "input": 1.00e-6,   # $1.00 per million input tokens
+    "output": 2.00e-6,  # $2.00 per million output tokens
+}
+```
+
+Versioned model names are matched by prefix (e.g. `gpt-4o-2024-08-06` matches `gpt-4o`). If a model is not in the pricing table, `usage.cost` will be `None` but token counts are still reported.
+
+#### Accumulating Usage Across Multiple Calls
+
+The `Usage` class supports addition for tracking cumulative costs:
+
+```python
+from orac import Usage
+
+total = Usage()
+for country in ["France", "Japan", "Brazil"]:
+    result = prompt.completion(country=country, include_usage=True)
+    total = total + result.usage
+    print(f"{country}: {result.usage.total_tokens} tokens, ${result.usage.cost:.6f}")
+
+print(f"Total: {total.total_tokens} tokens, ${total.cost:.6f}")
+```
+
 ### Conversation Management
 
 The `Prompt` class integrates with `ConversationDB` to manage multi-turn interactions.

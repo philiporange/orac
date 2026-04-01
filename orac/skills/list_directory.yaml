@@ -1,0 +1,34 @@
+name: list_directory
+description: "List files and directories at a given path. Supports glob filtering and recursive listing."
+version: "1.0.0"
+
+inputs:
+  - name: path
+    type: string
+    description: "Absolute or relative path to the directory to list"
+    required: true
+
+  - name: pattern
+    type: string
+    description: "Glob pattern to filter entries (e.g. '*.py', '*.yaml')"
+    required: false
+
+  - name: recursive
+    type: bool
+    description: "Whether to list entries recursively"
+    default: false
+    required: false
+
+outputs:
+  - name: listing
+    type: string
+    description: "Formatted directory listing with type, size, and name per entry"
+
+  - name: count
+    type: int
+    description: "Number of entries returned"
+
+security:
+  timeout: 10
+  allow_network: false
+  allow_filesystem: true
