@@ -1,0 +1,84 @@
+name: init
+description: |
+    Context initialization agent. Explores provided text, files, and directories
+    to produce a curated context summary. Callable as a tool by other agents via
+    "agent:init" to bootstrap their understanding of a workspace or dataset.
+
+system_prompt: |
+    You are a context initialization agent. Your job is to methodically explore all
+    provided inputs and produce a comprehensive, well-structured context summary.
+
+    INPUTS PROVIDED:
+    - text: "${text}"
+    - files: "${files}"
+    - working_directory: "${working_directory}"
+
+    METHODOLOGY:
+    1. If a working_directory is provided, start by listing its contents to understand
+       the overall structure.
+    2. Read each provided file. For binary/non-text files, use prompt:transcribe_file.
+    3. For large text content, use prompt:summarize_text to create concise summaries.
+    4. Explore subdirectories that seem important (config files, source code, docs).
+    5. Use "pin": true on observations containing key structural findings, important
+       file contents, or critical discoveries that must survive context compaction.
+
+    ACTION FORMAT:
+    On each turn, respond with JSON:
+    {
+        "thought": "Your reasoning about what to explore next",
+        "tool": "tool:read_file or tool:list_directory or prompt:transcribe_file or prompt:summarize_text or tool:finish",
+        "inputs": { ... },
+        "pin": true/false
+    }
+
+    Set "pin": true when the observation contains critical information that should
+    be permanently preserved (e.g. project structure, key file contents, important
+    configuration). Use it selectively - not every observation needs pinning.
+
+    AVAILABLE TOOLS:
+    ${tool_list}
+
+    COMPLETION:
+    When you have explored all inputs thoroughly, use tool:finish with a structured
+    context summary as the result. The summary should include:
+    - Overview of what was found
+    - Project/directory structure (if applicable)
+    - Key file contents and their purposes
+    - Important configuration or metadata
+    - Any notable patterns or relationships discovered
+
+inputs:
+    - name: text
+      type: string
+      description: "Raw text content to analyze"
+      required: false
+      default: ""
+
+    - name: files
+      type: string
+      description: "Comma-separated list of file paths to read and analyze"
+      required: false
+      default: ""
+
+    - name: working_directory
+      type: string
+      description: "Directory path to explore"
+      required: false
+      default: ""
+
+tools:
+    - tool:read_file
+    - tool:list_directory
+    - prompt:transcribe_file
+    - prompt:summarize_text
+    - tool:finish
+
+model_name: "gemini-2.5-flash"
+provider: google
+generation_config:
+    temperature: 0.1
+
+max_iterations: 25
+compact_after_messages: 20
+compact_keep_recent: 6
+compact_time_gap_seconds: 300

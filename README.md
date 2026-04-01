@@ -24,6 +24,7 @@
 * **Runtime configuration overrides**: Override model settings, API keys, generation options, and safety filters from the CLI or programmatically.
 * **Structured output support**: Request `application/json` responses or validate against a JSON Schema.
 * **Parameter validation**: Automatically convert and validate inputs by type.
+* **Usage & cost tracking**: Opt-in token usage and cost reporting for API calls, with built-in pricing for common models.
 * **Progress tracking**: Real-time progress updates for long-running operations.
 * **Comprehensive logging**: Logs all operations to file and provides optional verbose console output.
 
@@ -541,6 +542,12 @@ json_data = recipe_llm.completion_as_json(dish="pizza")  # Returns dict
 chat = Prompt("chat", use_conversation=True)
 print(chat("Hello! What's 15 + 25?"))      # → "40"
 print(chat("Times 3?"))                     # → "120" (maintains context)
+
+# Usage & cost tracking (opt-in)
+result = llm.completion(country="Japan", include_usage=True)
+print(result.text)                 # "Tokyo"
+print(result.usage.total_tokens)   # 47
+print(result.usage.cost)           # 0.000032
 
 # Using skills programmatically
 from orac.skill import load_skill, Skill

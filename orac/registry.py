@@ -7,7 +7,7 @@ from .config import Config
 @dataclass
 class RegisteredTool:
     name: str
-    type: str  # "prompt", "flow", or "tool"
+    type: str  # "prompt", "flow", "tool", or "agent"
     description: str
     inputs: List[Dict[str, Any]] = field(default_factory=list)
     outputs: List[Dict[str, Any]] = field(default_factory=list)
@@ -22,11 +22,13 @@ class ToolRegistry:
         flows_dir: Optional[str] = None,
         tools_dir: Optional[str] = None,
         teams_dir: Optional[str] = None,
+        agents_dir: Optional[str] = None,
     ):
         self.prompts_dir = Path(prompts_dir) if prompts_dir else Config.get_prompts_dir()
         self.flows_dir = Path(flows_dir) if flows_dir else Config.get_flows_dir()
         self.tools_dir = Path(tools_dir) if tools_dir else Config.get_skills_dir()
         self.teams_dir = Path(teams_dir) if teams_dir else (Config.PROJECT_ROOT / "orac" / "teams")
+        self.agents_dir = Path(agents_dir) if agents_dir else Config.get_agents_dir()
         self.tools: Dict[str, RegisteredTool] = {}
         self._load_all()
 
@@ -35,6 +37,7 @@ class ToolRegistry:
         self._load_flows()
         self._load_tools()
         self._load_teams()
+        self._load_agents()
 
     def _load_from_dir(self, directory: Path, tool_type: str):
         if not directory.exists():
@@ -70,6 +73,9 @@ class ToolRegistry:
         
     def _load_teams(self):
         self._load_from_dir(self.teams_dir, "team")
+
+    def _load_agents(self):
+        self._load_from_dir(self.agents_dir, "agent")
 
     def get_tool(self, tool_name: str) -> Optional[RegisteredTool]:
         return self.tools.get(tool_name)

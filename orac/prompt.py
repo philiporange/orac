@@ -30,6 +30,7 @@ from loguru import logger
 
 from orac.config import Config, Provider
 from orac.client import Client
+from orac.openai_client import CompletionResult, Usage
 from orac.conversation_db import ConversationDB
 from orac.progress import ProgressCallback, ProgressEvent, ProgressType
 
@@ -517,8 +518,9 @@ class Prompt:
         generation_config: Optional[Dict[str, Any]] = None,
         file_urls: Optional[List[str]] = None,
         provider: Optional[str | Provider] = None,
+        include_usage: bool = False,
         **kwargs_params,
-    ) -> str:
+    ) -> str | CompletionResult:
         """
         Execute the prompt and return the model's response.
         (String for normal prompts, JSON string when JSON/Schema mode.)
@@ -665,38 +667,52 @@ class Prompt:
                     except Exception as e:
                         logger.warning(f"Could not update provider configuration: {e}. Using defaults.")
 
-            # Call via client
-            result = self.client.chat(
+            # Call via client — always get usage data internally
+            raw_result = self.client.chat(
                 message_history=api_history,
                 provider=runtime_provider,
                 file_paths=all_files,
                 system_prompt=system_prompt,
+                include_usage=True,
                 **call_kwargs,
             )
-            
-            # Emit API request complete progress
+            # Wrap plain strings (e.g. from mocks) in CompletionResult
+            if isinstance(raw_result, CompletionResult):
+                completion_result = raw_result
+            else:
+                completion_result = CompletionResult(text=str(raw_result))
+
+            # Emit API request complete progress (include usage metadata)
+            api_meta: Dict[str, Any] = {"response_length": len(completion_result.text)}
+            if completion_result.usage:
+                api_meta["usage"] = {
+                    "prompt_tokens": completion_result.usage.prompt_tokens,
+                    "completion_tokens": completion_result.usage.completion_tokens,
+                    "total_tokens": completion_result.usage.total_tokens,
+                    "cost": completion_result.usage.cost,
+                }
             if self.progress_callback:
                 self.progress_callback(ProgressEvent(
                     type=ProgressType.API_REQUEST_COMPLETE,
                     message=f"API request completed for prompt: {self.prompt_name}",
-                    metadata={"response_length": len(result)}
+                    metadata=api_meta,
                 ))
-            
+
             # Save assistant response if conversation is enabled
             if self.use_conversation and self.auto_save and self._conversation_db:
                 self._conversation_db.add_message(
-                    self.conversation_id, "assistant", result
+                    self.conversation_id, "assistant", completion_result.text
                 )
-            
+
             # Emit prompt completion event
             if self.progress_callback:
                 self.progress_callback(ProgressEvent(
                     type=ProgressType.PROMPT_COMPLETE,
                     message=f"Completed prompt: {self.prompt_name}",
-                    metadata={"prompt_name": self.prompt_name, "result_length": len(result)}
+                    metadata={"prompt_name": self.prompt_name, "result_length": len(completion_result.text)}
                 ))
-            
-            return result
+
+            return completion_result if include_usage else completion_result.text
             
         except Exception as e:
             # Emit error event
@@ -717,10 +733,15 @@ class Prompt:
         generation_config: Optional[Dict[str, Any]] = None,
         file_urls: Optional[List[str]] = None,
         provider: Optional[str | Provider] = None,
+        include_usage: bool = False,
         **kwargs_params,
-    ) -> dict:
-        """Returns parsed JSON, raises exception if not valid JSON"""
-        result = self.completion(
+    ) -> dict | CompletionResult:
+        """Returns parsed JSON, raises exception if not valid JSON.
+
+        When include_usage=True, returns a CompletionResult whose .text is the
+        parsed dict (not a string).
+        """
+        completion_result = self.completion(
             message_history=message_history,
             model_name=model_name,
             api_key=api_key,
@@ -728,9 +749,14 @@ class Prompt:
             generation_config=generation_config,
             file_urls=file_urls,
             provider=provider,
+            include_usage=True,
             **kwargs_params,
         )
-        return json.loads(result)
+        parsed = json.loads(completion_result.text)
+        if include_usage:
+            completion_result.text = parsed
+            return completion_result
+        return parsed
 
     def __call__(
         self,
@@ -742,22 +768,25 @@ class Prompt:
         file_urls: Optional[List[str]] = None,
         provider: Optional[str | Provider] = None,
         force_json: bool = False,
+        include_usage: bool = False,
         **kwargs_params,
-    ) -> str | dict:
+    ) -> str | dict | CompletionResult:
         """
         Sophisticated wrapper around completion that automatically detects and parses JSON responses.
 
         Args:
             force_json: If True, raises an error if response isn't valid JSON
+            include_usage: If True, return CompletionResult with usage/cost data
             **kwargs: All other arguments passed to completion()
 
         Returns:
-            dict if response is valid JSON, str otherwise
+            dict if response is valid JSON, str otherwise.
+            CompletionResult when include_usage=True (with .text as dict or str).
 
         Raises:
             ValueError: If force_json=True and response is not valid JSON
         """
-        result = self.completion(
+        completion_result = self.completion(
             message_history=message_history,
             model_name=model_name,
             api_key=api_key,
@@ -765,16 +794,24 @@ class Prompt:
             generation_config=generation_config,
             file_urls=file_urls,
             provider=provider,
+            include_usage=True,
             **kwargs_params,
         )
-        
+
         # Try to parse as JSON
         try:
-            return json.loads(result)
+            parsed = json.loads(completion_result.text)
         except json.JSONDecodeError:
             if force_json:
-                raise ValueError(f"Response is not valid JSON: {result}")
-            return result
+                raise ValueError(f"Response is not valid JSON: {completion_result.text}")
+            parsed = None
+
+        if include_usage:
+            if parsed is not None:
+                completion_result.text = parsed
+            return completion_result
+
+        return parsed if parsed is not None else completion_result.text
 
     # ---------------------- Introspection helpers ----------------------- #
     def get_parameter_info(self) -> List[Dict[str, Any]]:

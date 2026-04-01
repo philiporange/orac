@@ -19,6 +19,7 @@ import networkx as nx
 
 from .logger import logger
 from .prompt import Prompt
+from .openai_client import CompletionResult, Usage
 from .skill import Skill, load_skill
 from .progress import ProgressCallback, ProgressEvent, ProgressType
 
@@ -76,7 +77,7 @@ class FlowExecutionError(Exception):
 class Flow:
     """Executes flows by managing step dependencies and data flow."""
 
-    def __init__(self, flow_spec: FlowSpec, prompts_dir: str = "prompts", 
+    def __init__(self, flow_spec: FlowSpec, prompts_dir: str = "prompts",
                  skills_dir: str = "skills",
                  progress_callback: Optional[ProgressCallback] = None):
         self.spec = flow_spec
@@ -84,6 +85,7 @@ class Flow:
         self.skills_dir = skills_dir
         self.progress_callback = progress_callback
         self.results: Dict[str, Dict[str, Any]] = {}
+        self.total_usage: Optional[Usage] = None
         self.graph = self._build_dependency_graph()
         self.execution_order = self._get_execution_order()
 
@@ -199,11 +201,23 @@ class Flow:
         # Execute the prompt or skill
         try:
             if step.prompt_name:
-                # Execute a prompt step
+                # Execute a prompt step (always capture usage internally)
                 prompt = Prompt(step.prompt_name, prompts_dir=self.prompts_dir,
                                progress_callback=self.progress_callback)
-                result = prompt(**resolved_inputs)
-                
+                completion_result = prompt(include_usage=True, **resolved_inputs)
+
+                # Accumulate usage from this step
+                if isinstance(completion_result, CompletionResult):
+                    if completion_result.usage:
+                        self.total_usage = (
+                            (self.total_usage + completion_result.usage)
+                            if self.total_usage
+                            else completion_result.usage
+                        )
+                    result = completion_result.text
+                else:
+                    result = completion_result
+
                 # Handle different result types
                 if isinstance(result, dict):
                     step_results = result
@@ -249,7 +263,8 @@ class Flow:
                 ))
             raise FlowExecutionError(f"Step '{step_name}' failed: {e}")
 
-    def execute(self, inputs: Dict[str, Any], dry_run: bool = False) -> Dict[str, Any]:
+    def execute(self, inputs: Dict[str, Any], dry_run: bool = False,
+                include_usage: bool = False) -> Dict[str, Any]:
         """Execute the flow and return final outputs."""
         logger.info(f"Starting flow execution: {self.spec.name}")
         
@@ -306,21 +321,38 @@ class Flow:
                     raise FlowExecutionError(f"Failed to resolve output '{output.name}': {e}")
             
             logger.info(f"Flow completed successfully with {len(final_outputs)} outputs")
-            
-            # Emit flow completion progress
+
+            # Emit flow completion progress (always include usage if available)
+            flow_complete_meta: Dict[str, Any] = {
+                "flow_name": self.spec.name,
+                "outputs": list(final_outputs.keys()),
+                "total_steps_completed": len(self.execution_order),
+            }
+            if self.total_usage:
+                flow_complete_meta["usage"] = {
+                    "prompt_tokens": self.total_usage.prompt_tokens,
+                    "completion_tokens": self.total_usage.completion_tokens,
+                    "total_tokens": self.total_usage.total_tokens,
+                    "cost": self.total_usage.cost,
+                }
             if self.progress_callback:
                 self.progress_callback(ProgressEvent(
                     type=ProgressType.FLOW_COMPLETE,
                     message=f"Completed flow: {self.spec.name}",
                     current_step=len(self.execution_order),
                     total_steps=len(self.execution_order),
-                    metadata={
-                        "flow_name": self.spec.name,
-                        "outputs": list(final_outputs.keys()),
-                        "total_steps_completed": len(self.execution_order)
-                    }
+                    metadata=flow_complete_meta,
                 ))
-            
+
+            if include_usage and self.total_usage:
+                final_outputs["_usage"] = {
+                    "prompt_tokens": self.total_usage.prompt_tokens,
+                    "completion_tokens": self.total_usage.completion_tokens,
+                    "total_tokens": self.total_usage.total_tokens,
+                    "model": self.total_usage.model,
+                    "cost": self.total_usage.cost,
+                }
+
             return final_outputs
             
         except Exception as e:

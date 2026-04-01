@@ -6,14 +6,21 @@ initialization and consent management, following PyPI best practices.
 
 from __future__ import annotations
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from pathlib import Path
 
 from .config import Config, Provider
 from .auth import AuthManager
 from .providers import ProviderRegistry
-from .openai_client import call_api
+from .openai_client import call_api, CompletionResult, Usage
 from .logger import logger
+
+
+def _ensure_completion_result(value: Any) -> CompletionResult:
+    """Wrap plain strings (e.g. from mocks) in CompletionResult."""
+    if isinstance(value, CompletionResult):
+        return value
+    return CompletionResult(text=str(value))
 
 
 class Client:
@@ -135,10 +142,11 @@ class Client:
         system_prompt: Optional[str] = None,
         model_name: Optional[str] = None,
         generation_config: Optional[Dict[str, Any]] = None,
-        file_paths: Optional[List[str]] = None
-    ) -> str:
+        file_paths: Optional[List[str]] = None,
+        include_usage: bool = False,
+    ) -> Union[str, CompletionResult]:
         """Make completion request.
-        
+
         Args:
             prompt: The prompt text
             provider: Provider to use (uses default if None)
@@ -146,29 +154,31 @@ class Client:
             model_name: Optional model override
             generation_config: Optional generation parameters
             file_paths: Optional list of file paths to attach
-            
+            include_usage: If True, return CompletionResult with usage/cost data
+
         Returns:
-            LLM response text
-            
+            str (default) or CompletionResult when include_usage=True
+
         Raises:
             RuntimeError: If client is not initialized
         """
         if not self._initialized:
             raise RuntimeError("Client must have at least one provider. Call add_provider() first.")
-        
+
         # Convert to message history format expected by call_api
         message_history = [{"role": "user", "text": prompt}]
-        
-        return call_api(
+
+        result = _ensure_completion_result(call_api(
             self._provider_registry,
             provider=provider,
             message_history=message_history,
             system_prompt=system_prompt,
             model_name=model_name,
             generation_config=generation_config,
-            file_paths=file_paths
-        )
-    
+            file_paths=file_paths,
+        ))
+        return result if include_usage else result.text
+
     def chat(
         self,
         message_history: List[Dict[str, Any]],
@@ -177,10 +187,11 @@ class Client:
         system_prompt: Optional[str] = None,
         model_name: Optional[str] = None,
         generation_config: Optional[Dict[str, Any]] = None,
-        file_paths: Optional[List[str]] = None
-    ) -> str:
+        file_paths: Optional[List[str]] = None,
+        include_usage: bool = False,
+    ) -> Union[str, CompletionResult]:
         """Make chat request with message history.
-        
+
         Args:
             message_history: List of message dictionaries with 'role' and 'text' keys
             provider: Provider to use (uses default if None)
@@ -188,25 +199,27 @@ class Client:
             model_name: Optional model override
             generation_config: Optional generation parameters
             file_paths: Optional list of file paths to attach
-            
+            include_usage: If True, return CompletionResult with usage/cost data
+
         Returns:
-            LLM response text
-            
+            str (default) or CompletionResult when include_usage=True
+
         Raises:
             RuntimeError: If client is not initialized
         """
         if not self._initialized:
             raise RuntimeError("Client must have at least one provider. Call add_provider() first.")
-        
-        return call_api(
+
+        result = _ensure_completion_result(call_api(
             self._provider_registry,
             provider=provider,
             message_history=message_history,
             system_prompt=system_prompt,
             model_name=model_name,
             generation_config=generation_config,
-            file_paths=file_paths
-        )
+            file_paths=file_paths,
+        ))
+        return result if include_usage else result.text
     
     def get_client_status(self) -> Dict[str, Any]:
         """Get comprehensive client status.
