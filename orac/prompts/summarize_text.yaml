@@ -1,6 +1,6 @@
 description: "Produce a factual, concise summary of the provided text, preserving key details and structure"
-model_name: "gemini-3.1-flash-lite-preview"
-provider: "google"
+model_name: "deepseek-v4-flash"
+provider: "deepseek"
 generation_config:
     temperature: 0
 system_prompt: |

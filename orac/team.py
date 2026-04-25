@@ -56,9 +56,11 @@ class Team:
     def _create_team_registry(self) -> ToolRegistry:
         """Create registry that includes team agents as delegatable tools."""
         team_registry = ToolRegistry(
-            prompts_dir=self.registry.prompts_dir,
-            flows_dir=self.registry.flows_dir,
-            tools_dir=self.registry.tools_dir
+            prompts_dirs=self.registry.prompts_dirs,
+            flows_dirs=self.registry.flows_dirs,
+            tools_dirs=self.registry.tools_dirs,
+            teams_dirs=self.registry.teams_dirs,
+            agents_dirs=self.registry.agents_dirs,
         )
 
         # Add each team agent as a tool the leader can delegate to

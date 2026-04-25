@@ -1,6 +1,6 @@
 description: "Convert natural language descriptions into precise bash commands"
-provider: "google"
-model_name: "gemini-3-flash-preview"
+provider: "deepseek"
+model_name: "deepseek-v4-flash"
 generation_config:
     temperature: 0
 system_prompt: |

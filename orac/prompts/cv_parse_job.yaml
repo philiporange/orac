@@ -1,0 +1,62 @@
+prompt: |
+  URL: ${job_url}
+  Page title: ${page_title}
+
+  Cleaned listing text:
+  ${job_text}
+
+  TASKS:
+  - Extract company name, role title, location, salary, employment type, and seniority if present.
+  - Separate required vs preferred criteria.
+  - Extract responsibilities, qualifications, tools, domain terms, and culture signals.
+  - Produce a keyword set useful for ATS-aware tailoring.
+  - Note ambiguities and missing data.
+  - Return only valid JSON matching the schema.
+
+system_prompt: |
+  You are a precise job-listing analyst.
+  Extract the role requirements from the listing text without adding assumptions beyond the text.
+  Be thorough in identifying keywords, domain signals, and hidden expectations from wording.
+  Separate essential from desirable criteria carefully.
+
+parameters:
+  - name: job_url
+    type: string
+    required: true
+    description: URL of the job listing
+  - name: page_title
+    type: string
+    default: ""
+    description: Page title if available
+  - name: job_text
+    type: string
+    required: true
+    description: Cleaned text content of the job listing
+
+response_mime_type: application/json
+response_schema:
+  type: object
+  properties:
+    companyName: { type: string }
+    roleTitle: { type: string }
+    location: { type: string }
+    salary: { type: string }
+    employmentType: { type: string }
+    seniority: { type: string }
+    normalized:
+      type: object
+      properties:
+        responsibilities: { type: array, items: { type: string } }
+        requiredSkills: { type: array, items: { type: string } }
+        preferredSkills: { type: array, items: { type: string } }
+        requiredExperience: { type: array, items: { type: string } }
+        qualifications: { type: array, items: { type: string } }
+        keywords: { type: array, items: { type: string } }
+        domainSignals: { type: array, items: { type: string } }
+        cultureSignals: { type: array, items: { type: string } }
+        applicationInstructions: { type: array, items: { type: string } }
+    confidenceNotes: { type: array, items: { type: string } }
+
+generation_config:
+  temperature: 0.2
+  max_tokens: 3000

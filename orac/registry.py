@@ -1,6 +1,15 @@
+"""Unified discovery registry for Orac prompts, flows, skills, teams, and agents.
+
+The registry loads executable YAML resources from Orac's layered resource
+directories: project resources first, then user resources, then package
+resources. Higher-priority resources shadow lower-priority resources with the
+same tool key while preserving direct-directory overrides for tests and custom
+callers.
+"""
+
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Iterable
 import yaml
 from .config import Config
 
@@ -21,16 +30,43 @@ class ToolRegistry:
         prompts_dir: Optional[str] = None,
         flows_dir: Optional[str] = None,
         tools_dir: Optional[str] = None,
+        skills_dir: Optional[str] = None,
         teams_dir: Optional[str] = None,
         agents_dir: Optional[str] = None,
+        prompts_dirs: Optional[Iterable[str]] = None,
+        flows_dirs: Optional[Iterable[str]] = None,
+        tools_dirs: Optional[Iterable[str]] = None,
+        skills_dirs: Optional[Iterable[str]] = None,
+        teams_dirs: Optional[Iterable[str]] = None,
+        agents_dirs: Optional[Iterable[str]] = None,
     ):
-        self.prompts_dir = Path(prompts_dir) if prompts_dir else Config.get_prompts_dir()
-        self.flows_dir = Path(flows_dir) if flows_dir else Config.get_flows_dir()
-        self.tools_dir = Path(tools_dir) if tools_dir else Config.get_skills_dir()
-        self.teams_dir = Path(teams_dir) if teams_dir else (Config.PROJECT_ROOT / "orac" / "teams")
-        self.agents_dir = Path(agents_dir) if agents_dir else Config.get_agents_dir()
+        tools_dir = tools_dir or skills_dir
+        tools_dirs = tools_dirs or skills_dirs
+
+        self.prompts_dirs = self._resolve_dirs(prompts_dir, prompts_dirs, Config.get_prompts_dirs)
+        self.flows_dirs = self._resolve_dirs(flows_dir, flows_dirs, Config.get_flows_dirs)
+        self.tools_dirs = self._resolve_dirs(tools_dir, tools_dirs, Config.get_skills_dirs)
+        self.teams_dirs = self._resolve_dirs(teams_dir, teams_dirs, Config.get_teams_dirs)
+        self.agents_dirs = self._resolve_dirs(agents_dir, agents_dirs, Config.get_agents_dirs)
+
+        self.prompts_dir = self.prompts_dirs[0]
+        self.flows_dir = self.flows_dirs[0]
+        self.tools_dir = self.tools_dirs[0]
+        self.teams_dir = self.teams_dirs[0]
+        self.agents_dir = self.agents_dirs[0]
         self.tools: Dict[str, RegisteredTool] = {}
         self._load_all()
+
+    @staticmethod
+    def _resolve_dirs(single_dir, multiple_dirs, default_dirs):
+        """Return normalized resource directories in priority order."""
+        if multiple_dirs is not None:
+            dirs = multiple_dirs
+        elif single_dir is not None:
+            dirs = [single_dir]
+        else:
+            dirs = default_dirs()
+        return [Path(directory) for directory in dirs]
 
     def _load_all(self):
         self._load_prompts()
@@ -38,6 +74,10 @@ class ToolRegistry:
         self._load_tools()
         self._load_teams()
         self._load_agents()
+
+    def _load_from_dirs(self, directories: List[Path], tool_type: str):
+        for directory in directories:
+            self._load_from_dir(directory, tool_type)
 
     def _load_from_dir(self, directory: Path, tool_type: str):
         if not directory.exists():
@@ -53,6 +93,8 @@ class ToolRegistry:
                 
                 # The agent identifies tools by `type:name` (e.g., `prompt:capital`)
                 tool_key = f"{tool_type}:{name}"
+                if tool_key in self.tools:
+                    continue
                 self.tools[tool_key] = RegisteredTool(
                     name=name,
                     type=tool_type,
@@ -63,19 +105,19 @@ class ToolRegistry:
                 )
 
     def _load_prompts(self):
-        self._load_from_dir(self.prompts_dir, "prompt")
+        self._load_from_dirs(self.prompts_dirs, "prompt")
 
     def _load_flows(self):
-        self._load_from_dir(self.flows_dir, "flow")
+        self._load_from_dirs(self.flows_dirs, "flow")
         
     def _load_tools(self):
-        self._load_from_dir(self.tools_dir, "tool")
+        self._load_from_dirs(self.tools_dirs, "tool")
         
     def _load_teams(self):
-        self._load_from_dir(self.teams_dir, "team")
+        self._load_from_dirs(self.teams_dirs, "team")
 
     def _load_agents(self):
-        self._load_from_dir(self.agents_dir, "agent")
+        self._load_from_dirs(self.agents_dirs, "agent")
 
     def get_tool(self, tool_name: str) -> Optional[RegisteredTool]:
         return self.tools.get(tool_name)

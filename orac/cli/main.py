@@ -201,7 +201,7 @@ def main():
     )
     parser.add_argument(
         "--provider",
-        choices=["openai", "google", "anthropic", "azure", "openrouter", "z.ai", "cli", "custom"],
+        choices=["openai", "google", "anthropic", "azure", "openrouter", "z.ai", "deepseek", "cli", "custom"],
         help="Override LLM provider"
     )
     parser.add_argument(

@@ -1,0 +1,61 @@
+prompt: |
+  Candidate dossier:
+  ${user_md}
+
+  Job listing dossier:
+  ${job_listing_md}
+
+  Company biography:
+  ${company_biography_md}
+
+  Tailoring plan:
+  ${tailoring_plan}
+
+  TASKS:
+  - Write a strong opening that links the candidate to the role.
+  - Use 2-4 concrete evidence-based examples from the candidate's experience.
+  - Handle gaps or career pivots honestly.
+  - Close professionally and clearly.
+  - Write in British English.
+  - Keep to 3-5 paragraphs.
+  - Avoid generic flattery about the company.
+  - Only reference company facts supported by the biography.
+  - Do not repeat the CV line-by-line.
+
+system_prompt: |
+  You are an expert UK cover-letter writer.
+  Write a concise, persuasive, truthful cover letter in British English.
+  The letter must feel tailored to this employer and role, but it must never claim unsupported knowledge or false fit.
+  Aim for warm professional tone unless the tailoring plan specifies otherwise.
+
+parameters:
+  - name: user_md
+    type: string
+    required: true
+  - name: job_listing_md
+    type: string
+    required: true
+  - name: company_biography_md
+    type: string
+    required: true
+  - name: tailoring_plan
+    type: string
+    required: true
+
+response_mime_type: application/json
+response_schema:
+  type: object
+  properties:
+    recipientBlock: { type: string }
+    dateLine: { type: string }
+    subjectLine: { type: string }
+    greeting: { type: string }
+    openingParagraph: { type: string }
+    bodyParagraphs: { type: array, items: { type: string } }
+    closingParagraph: { type: string }
+    signoff: { type: string }
+    signatureName: { type: string }
+
+generation_config:
+  temperature: 0.5
+  max_tokens: 2000

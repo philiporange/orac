@@ -28,7 +28,7 @@ def add_chat_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--api-key", help="Override API key")
     parser.add_argument(
         "--provider",
-        choices=["openai", "google", "anthropic", "azure", "openrouter", "z.ai", "cli", "custom"],
+        choices=["openai", "google", "anthropic", "azure", "openrouter", "z.ai", "deepseek", "cli", "custom"],
         help="Select LLM provider",
     )
     parser.add_argument("--base-url", help="Custom base URL")

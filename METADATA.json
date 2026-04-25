@@ -1,118 +1,232 @@
 {
-  "name": "orac",
-  "short_description": "Lightweight YAML-driven framework for OpenAI-compatible LLM APIs with autonomous agents, flows, and skills.",
-  "long_description": "Orac is a comprehensive LLM framework that enables developers to work with OpenAI-compatible APIs through a YAML-driven configuration system. It provides multiple levels of abstraction including prompts for single LLM interactions, flows for multi-step workflows with dependency management, autonomous ReAct-style agents that can reason and use tools, collaborative multi-agent teams, and executable Python skills. The framework includes a modern CLI with resource-action command structure, a Python API for programmatic access, multi-provider support (OpenAI, Google, Anthropic, Azure, OpenRouter, custom), conversation history tracking with SQLite, file attachment support for local and remote files, and comprehensive logging. It's designed for building complex AI applications from simple prompts to sophisticated autonomous agent systems.",
+  "name": "Orac",
+  "short_description": "Lightweight YAML-driven framework for OpenAI-compatible LLM APIs with autonomous agents, multi-step flows, and skills.",
+  "long_description": "Orac is a comprehensive Python framework for building LLM applications using OpenAI-compatible APIs. It enables developers to define complex AI tasks through clean YAML configurations while providing multiple levels of abstraction: single prompts for basic interactions, flows for orchestrating multi-step workflows with dependency management, autonomous ReAct-style agents with tool usage and reasoning capabilities, collaborative multi-agent teams with leader coordination, and executable Python skills. The framework includes a modern CLI with intuitive resource-action commands, a full Python API for programmatic access, multi-provider support (OpenAI, Google Gemini, Anthropic, Azure, OpenRouter, custom), SQLite-based conversation history with context preservation, file attachment support for local and remote files with glob pattern matching, structured JSON output validation against schemas, comprehensive logging with rotation and verbose modes, token usage tracking with cost estimation, and a FastAPI-based HTTP API with web UI for browser-based access.",
   "keywords": [
     "llm",
-    "openai",
+    "large-language-models",
+    "openai-compatible",
     "yaml-driven",
     "framework",
     "autonomous-agents",
     "react-pattern",
-    "workflows",
+    "multi-step-workflows",
+    "flow-orchestration",
     "cli-tool",
+    "command-line",
+    "python-framework",
     "multi-provider",
     "gemini",
     "anthropic",
     "azure",
+    "openrouter",
     "conversation-management",
     "python-api",
     "prompt-engineering",
     "agent-teams",
-    "multi-step-flows",
+    "multi-agent-orchestration",
     "structured-output",
+    "json-schema-validation",
     "tool-registry",
-    "skills-system"
+    "skills-system",
+    "fastapi",
+    "rest-api",
+    "web-ui",
+    "token-tracking",
+    "cost-estimation",
+    "file-attachments",
+    "conversation-history",
+    "sqlite"
   ],
   "primary_language": "Python",
   "languages": [
     "Python",
-    "YAML"
+    "YAML",
+    "JavaScript",
+    "HTML",
+    "CSS"
   ],
   "frameworks": [
+    "FastAPI",
     "OpenAI Python Client",
-    "FastAPI (potential)",
-    "Click (CLI)",
-    "Pydantic (validation)",
-    "SQLite (conversation history)",
-    "NetworkX (graph operations)",
-    "loguru (logging)",
-    "python-dotenv (environment config)"
+    "Click",
+    "Pydantic",
+    "NetworkX",
+    "loguru",
+    "python-dotenv",
+    "google-generativeai",
+    "SQLite",
+    "Uvicorn"
   ],
   "modules": [
     {
       "path": "orac/__init__.py",
-      "description": "Main package initialization with global client management, init functions, and API exports for Prompt, Flow, Agent, and Skill classes."
+      "description": "Package initialization with global client management, init/quick_init functions, and exports for Prompt, Flow, Agent, Skill, and Client classes."
     },
     {
       "path": "orac/prompt.py",
-      "description": "LLM wrapper that loads YAML prompt specifications, resolves parameters, handles local and remote file attachments, supports custom endpoints and API keys."
+      "description": "Core Prompt class for single LLM interactions with YAML loading, parameter resolution, template variable substitution, file attachment handling, and custom endpoint support."
     },
     {
       "path": "orac/agent.py",
-      "description": "Agent engine implementing ReAct-style autonomous agents with tool usage capability, reasoning, and integration with the tool registry."
+      "description": "Agent engine implementing ReAct-style autonomous agents with tool registry integration, reasoning loops, JSON-based tool specifications, and max iteration controls."
     },
     {
       "path": "orac/flow.py",
-      "description": "Flow orchestration engine for chaining multiple prompts together in DAG structure with dependency management and result passing."
+      "description": "Flow orchestration engine for chaining multiple prompts in DAG structure with dependency management, step inputs/outputs, and result passing between steps."
     },
     {
       "path": "orac/skill.py",
-      "description": "Skills execution engine for loading and executing Python skill scripts with YAML specifications and proper sandboxing."
+      "description": "Skills execution engine for loading YAML skill specifications and executing Python skill implementations with input/output validation and sandboxing."
     },
     {
       "path": "orac/team.py",
-      "description": "Multi-agent team orchestration for collaborative tasks with leader coordination and agent delegation patterns."
+      "description": "Multi-agent team orchestration for collaborative tasks with leader agent coordination, agent delegation, and team constitution guidelines."
     },
     {
       "path": "orac/client.py",
-      "description": "Main Client class providing explicit initialization, multi-provider support, and unified API for authentication and provider management."
+      "description": "Main Client class providing explicit initialization, multi-provider management, chat completion API, usage tracking, and provider registry."
     },
     {
       "path": "orac/config.py",
-      "description": "Centralized configuration constants including provider defaults, model settings, and immutable project-level configuration."
+      "description": "Centralized configuration constants including Provider enum, model settings, default values, and immutable project-level configuration."
     },
     {
       "path": "orac/openai_client.py",
-      "description": "Low-level API client helper for OpenAI-compatible endpoints with provider registry support and file encoding utilities."
+      "description": "Low-level OpenAI-compatible API client with provider registry support, CompletionResult/Usage dataclasses, MODEL_PRICING table, and file encoding utilities."
     },
     {
       "path": "orac/providers.py",
-      "description": "Provider registry managing multiple LLM provider configurations (OpenAI, Google, Anthropic, Azure, OpenRouter, custom) with unified interface."
+      "description": "Provider registry managing multiple LLM provider configurations (OpenAI, Google, Anthropic, Azure, OpenRouter, custom) with unified interface and base URL management."
     },
     {
       "path": "orac/registry.py",
-      "description": "Tool registry for unified discovery and access to all executable resources (prompts, flows, skills, teams) with metadata management."
+      "description": "Tool registry for unified discovery and access to prompts, flows, skills, and agents with metadata management and resource listing capabilities."
     },
     {
       "path": "orac/chat.py",
-      "description": "Chat interface for multi-turn conversations with automatic context preservation and conversation management."
+      "description": "Chat interface for interactive multi-turn conversations with automatic context preservation and interactive curses-based UI support."
     },
     {
       "path": "orac/conversation_db.py",
-      "description": "SQLite-based conversation database for storing and retrieving multi-turn conversation history and context."
+      "description": "SQLite-based conversation database for storing and retrieving multi-turn conversation history with context management and rotation policies."
     },
     {
       "path": "orac/auth.py",
-      "description": "Authentication manager for handling API keys, provider credentials, interactive consent, and secure credential storage."
+      "description": "Authentication manager for handling API keys, provider credentials, interactive consent prompting, and secure credential storage with environment variable support."
+    },
+    {
+      "path": "orac/api.py",
+      "description": "FastAPI-based HTTP API server exposing REST endpoints for prompts, flows, skills, agents, teams, and chat with Swagger documentation and web UI."
     },
     {
       "path": "orac/cli/main.py",
-      "description": "Main CLI entry point implementing resource-action command structure with comprehensive help system and command routing."
+      "description": "Main CLI entry point implementing resource-action command structure with comprehensive help system, command routing, and discovery features."
     }
   ],
   "git": {
     "is_repo": true,
     "remote_url": "https://github.com/philiporange/orac.git",
-    "github_name": "philiporange/orac",
-    "default_branch": "main",
-    "last_commit": "2025-08-22T09:59:08+01:00"
+    "github_org": "philiporange",
+    "github_repo": "orac",
+    "default_branch": "main"
   },
   "stats": {
-    "files": 134,
-    "lines_of_code": 14995,
-    "size_bytes": 10658184
+    "python_files": 43,
+    "total_lines_of_code": 11574,
+    "project_size_bytes": 10658184,
+    "yaml_definitions": 15,
+    "test_files": 6
   },
-  "generated_at": "2025-12-06T19:36:13.866770",
-  "generator_version": "1.0.0"
+  "features": [
+    "YAML-driven prompt definitions",
+    "Multi-step flow orchestration with DAG execution",
+    "ReAct-style autonomous agents with tool usage",
+    "Multi-agent team coordination with leader pattern",
+    "Executable Python skills with YAML specifications",
+    "Interactive CLI with resource-action command structure",
+    "Python API for programmatic access",
+    "Multi-provider support (OpenAI, Google, Anthropic, Azure, OpenRouter, custom)",
+    "Conversation history tracking with SQLite",
+    "File attachment support for local and remote files",
+    "Glob pattern matching for file selection",
+    "Template variable substitution with ${variable} syntax",
+    "Structured JSON output with schema validation",
+    "Token usage tracking with cost estimation",
+    "Multiple LLM provider support with unified interface",
+    "Custom API endpoints and authentication",
+    "Generation configuration (temperature, max_tokens, etc.)",
+    "Conversation mode with automatic context preservation",
+    "Progress tracking for long-running operations",
+    "Comprehensive logging with rotation",
+    "HTTP API server with FastAPI",
+    "Web UI for browser-based access",
+    "Swagger documentation for API endpoints",
+    "Interactive curses-based chat UI",
+    "Safety settings and content filtering support"
+  ],
+  "commands": [
+    "orac prompt run",
+    "orac prompt list",
+    "orac prompt show",
+    "orac flow run",
+    "orac flow list",
+    "orac flow show",
+    "orac agent run",
+    "orac agent list",
+    "orac team run",
+    "orac team list",
+    "orac skill run",
+    "orac skill list",
+    "orac chat send",
+    "orac chat interactive",
+    "orac chat list",
+    "orac server",
+    "orac config",
+    "orac auth"
+  ],
+  "entry_points": {
+    "console_scripts": [
+      "orac"
+    ]
+  },
+  "dependencies": {
+    "core": [
+      "google-generativeai>=0.3.0",
+      "openai>=1.23.0",
+      "PyYAML>=6.0",
+      "python-dotenv>=1.0.0",
+      "loguru>=0.7.2",
+      "networkx>=3.0",
+      "fastapi>=0.109.0",
+      "uvicorn>=0.27.0"
+    ]
+  },
+  "supported_providers": [
+    "OpenAI",
+    "Google Gemini",
+    "Anthropic Claude",
+    "Azure OpenAI",
+    "OpenRouter",
+    "Custom (any OpenAI-compatible endpoint)"
+  ],
+  "use_cases": [
+    "Single LLM interactions with configuration-driven prompts",
+    "Complex multi-step AI workflows with dependency management",
+    "Autonomous agents that reason and use tools",
+    "Collaborative multi-agent systems with team coordination",
+    "Conversational AI applications with history tracking",
+    "File analysis and multimodal LLM interactions",
+    "Building LLM applications against multiple providers",
+    "Custom domain-specific skills integration",
+    "Cost tracking and token usage monitoring",
+    "Production HTTP APIs for LLM applications",
+    "Interactive CLI tools for prompt experimentation"
+  ],
+  "license": "CC0 1.0 Universal",
+  "author": "Philip Orange <git@philiporange.com>",
+  "version": "0.1.0",
+  "repository": "https://github.com/philiporange/orac",
+  "documentation_url": "https://github.com/philiporange/orac/blob/main/README.md",
+  "generated_at": "2026-04-04T00:00:00Z"
 }

@@ -1,0 +1,46 @@
+prompt: |
+  Here is the structured candidate profile:
+
+  ${profile_json}
+
+  TASKS:
+  - Identify missing or conflicting information.
+  - Prioritize only high-value questions that unlock: contact info completeness, date accuracy, strongest evidence/achievements, right-to-work/location/work preference, target role positioning, portfolio/proof links, missing education or certification details.
+  - Ask at most 8 questions.
+  - For each question, explain why it matters.
+  - Detect conflicts: overlapping job dates, current role marked ended, qualification mismatches, different spellings of same employer, suspicious metrics without source.
+
+system_prompt: |
+  You are an accuracy-focused career interviewer.
+  Given a structured candidate profile, identify the smallest set of follow-up questions that would most improve reliability and usefulness for future job applications.
+  Do not ask unnecessary questions. Focus on what genuinely matters for creating a truthful, strong CV.
+
+parameters:
+  - name: profile_json
+    type: string
+    required: true
+    description: JSON string of the structured candidate profile
+
+response_mime_type: application/json
+response_schema:
+  type: object
+  properties:
+    missing_essentials:
+      type: array
+      items: { type: string }
+    conflicts:
+      type: array
+      items: { type: string }
+    questions:
+      type: array
+      items:
+        type: object
+        properties:
+          question: { type: string }
+          rationale: { type: string }
+          field_path: { type: string }
+          priority: { type: string, enum: ["high", "medium", "low"] }
+
+generation_config:
+  temperature: 0.3
+  max_tokens: 2000

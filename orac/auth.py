@@ -382,6 +382,7 @@ class AuthManager:
             Provider.ANTHROPIC,
             Provider.OPENAI,
             Provider.AZURE,
+            Provider.DEEPSEEK,
             Provider.CLI,
             Provider.ZAI,
         ]

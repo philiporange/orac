@@ -1,0 +1,39 @@
+name: web_research
+description: "Research a company or topic by reading a URL and searching the web using Gemini's URL context and Google Search tools"
+version: "1.0.0"
+
+inputs:
+  - name: url
+    type: string
+    description: "The URL to research (e.g., a company website)"
+    required: true
+
+  - name: prompt
+    type: string
+    description: "Instructions for what to research and extract from the URL and web"
+    required: true
+
+  - name: model
+    type: string
+    description: "Gemini model to use"
+    default: "gemini-2.5-flash"
+    required: false
+
+outputs:
+  - name: result
+    type: string
+    description: "The research results as text"
+
+  - name: urls_retrieved
+    type: list
+    description: "List of URLs that were successfully retrieved"
+
+metadata:
+  author: "Orac"
+  tags: ["research", "web", "company", "gemini"]
+  requirements: ["google-genai>=1.0.0"]
+
+security:
+  timeout: 60
+  allow_network: true
+  allow_filesystem: false
