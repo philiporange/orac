@@ -1,0 +1,30 @@
+prompt: |
+  Candidate profile JSON:
+  ${profile_json}
+
+  TASKS:
+  - Write a comprehensive user.md in clean Markdown.
+  - Include all potentially useful information for future applications.
+  - Distinguish confirmed facts from notes/uncertainties where relevant.
+  - Keep it readable and well-sectioned.
+  - Preserve exact titles, employers, and dates where available.
+  - Use the section structure: Basics, Professional Identity, Employment History, Education, Certifications and Training, Skills, Projects/Portfolio, Interests, Personality/Working Style, Exclusions/Sensitive Notes.
+  - Do not embellish. Do not invent. This is a factual dossier, not a marketing document.
+
+system_prompt: |
+  You are writing a canonical career dossier in Markdown.
+  This document is comprehensive and factual.
+  It is not a marketing document.
+  It should be useful context for future CV and cover-letter generation.
+  Do not invent information.
+  Do not convert uncertainty into certainty.
+
+parameters:
+  - name: profile_json
+    type: string
+    required: true
+    description: Structured candidate profile JSON
+
+generation_config:
+  temperature: 0.3
+  max_tokens: 4000

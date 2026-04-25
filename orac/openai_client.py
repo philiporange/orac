@@ -52,6 +52,110 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
 # fmt: on
 
 
+# ---------------------------------------------------------------------#
+# Reasoning / thinking knob translation                                #
+# ---------------------------------------------------------------------#
+
+# User-facing values follow the OpenAI Responses API vocabulary.
+_VALID_EFFORT_VALUES: set[str] = {"none", "minimal", "low", "medium", "high", "xhigh"}
+
+# Effort → Anthropic extended-thinking budget_tokens mapping.
+_ANTHROPIC_EFFORT_BUDGETS: Dict[str, int] = {
+    "none": 0,
+    "minimal": 512,
+    "low": 1024,
+    "medium": 4096,
+    "high": 16000,
+    "xhigh": 32000,
+}
+
+# DeepSeek's OpenAI-compat shim accepts only {"high", "max"}.
+_DEEPSEEK_EFFORT_MAP: Dict[str, str] = {
+    "none": "high",
+    "minimal": "high",
+    "low": "high",
+    "medium": "high",
+    "high": "high",
+    "xhigh": "max",
+}
+
+
+def _apply_reasoning_knobs(
+    req: Dict[str, Any],
+    provider: Optional[Provider],
+    model_name: str,
+    *,
+    thinking: Optional[bool] = None,
+    reasoning_effort: Optional[str] = None,
+) -> None:
+    """Mutate *req* to apply unified thinking/reasoning_effort knobs per provider.
+
+    User-facing values follow the OpenAI Responses API vocabulary:
+        reasoning_effort ∈ {"none", "minimal", "low", "medium", "high", "xhigh"}
+        thinking ∈ {True, False}
+
+    Per-provider translation:
+        OpenAI     → top-level `reasoning_effort`; thinking=False → effort="none"
+        DeepSeek   → top-level `reasoning_effort` clamped to {"high","max"};
+                     thinking → extra_body.thinking = {"type": "enabled"|"disabled"}
+        Anthropic  → extra_body.thinking = {"type":"enabled","budget_tokens":N}
+                     where N is mapped from effort; thinking=False omits the block
+        Google     → top-level `reasoning_effort`; thinking=False sets
+                     extra_body.extra_body.google.thinking_config.thinking_budget=0
+        Others     → passthrough `reasoning_effort` + extra_body.thinking
+    """
+    if thinking is None and reasoning_effort is None:
+        return
+
+    if reasoning_effort is not None and reasoning_effort not in _VALID_EFFORT_VALUES:
+        logger.warning(
+            f"Invalid reasoning_effort '{reasoning_effort}'; "
+            f"expected one of {sorted(_VALID_EFFORT_VALUES)}. Ignoring."
+        )
+        reasoning_effort = None
+
+    extra_body: Dict[str, Any] = req.setdefault("extra_body", {})
+
+    if provider == Provider.OPENAI:
+        if reasoning_effort:
+            req["reasoning_effort"] = reasoning_effort
+        elif thinking is False:
+            req["reasoning_effort"] = "none"
+
+    elif provider == Provider.DEEPSEEK:
+        if thinking is not None:
+            extra_body["thinking"] = {"type": "enabled" if thinking else "disabled"}
+        if reasoning_effort:
+            req["reasoning_effort"] = _DEEPSEEK_EFFORT_MAP[reasoning_effort]
+
+    elif provider == Provider.ANTHROPIC:
+        if thinking is False:
+            pass
+        elif thinking is True or reasoning_effort:
+            budget = _ANTHROPIC_EFFORT_BUDGETS.get(reasoning_effort or "medium", 4096)
+            if budget > 0:
+                extra_body["thinking"] = {
+                    "type": "enabled",
+                    "budget_tokens": budget,
+                }
+
+    elif provider == Provider.GOOGLE:
+        if reasoning_effort:
+            req["reasoning_effort"] = reasoning_effort
+        if thinking is False:
+            google_cfg = extra_body.setdefault("extra_body", {}).setdefault("google", {})
+            google_cfg["thinking_config"] = {"thinking_budget": 0}
+
+    else:
+        if reasoning_effort:
+            req["reasoning_effort"] = reasoning_effort
+        if thinking is not None:
+            extra_body["thinking"] = {"type": "enabled" if thinking else "disabled"}
+
+    if not extra_body:
+        req.pop("extra_body", None)
+
+
 def _lookup_pricing(model_name: str) -> Optional[Dict[str, float]]:
     """Find pricing for *model_name*, trying prefix matches for versioned names."""
     if model_name in MODEL_PRICING:
@@ -203,6 +307,8 @@ def call_api(
     system_prompt: Optional[str] = None,
     model_name: Optional[str] = None,  # Use provider's model if None
     generation_config: Optional[Dict[str, Any]] = None,
+    thinking: Optional[bool] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> CompletionResult:
     """
     Call LLM API using provider registry.
@@ -237,6 +343,18 @@ def call_api(
     }
     if generation_config:
         req.update(generation_config)
+    if "max_tokens" in req:
+        req["max_completion_tokens"] = req.pop("max_tokens")
+
+    # Translate unified thinking / reasoning_effort knobs per provider.
+    resolved_provider = provider or provider_registry.get_default_provider()
+    _apply_reasoning_knobs(
+        req,
+        resolved_provider,
+        resolved_model_name,
+        thinking=thinking,
+        reasoning_effort=reasoning_effort,
+    )
 
     # -----------------------------------------------------------------#
     # Call API                                                         #

@@ -52,6 +52,8 @@ class AgentSpec:
     base_url: Optional[str] = None
     api_key: Optional[str] = None
     generation_config: Dict[str, Any] = field(default_factory=dict)
+    thinking: Optional[bool] = None
+    reasoning_effort: Optional[str] = None
     max_iterations: int = 15
     compact_after_messages: int = 12
     compact_keep_recent: int = 4
@@ -162,7 +164,9 @@ class Agent:
                     message_history=self.message_history,
                     system_prompt=system_prompt,
                     model_name=self.spec.model_name,
-                    generation_config=processed_config
+                    generation_config=processed_config,
+                    thinking=self.spec.thinking,
+                    reasoning_effort=self.spec.reasoning_effort,
                 )
                 # Accumulate usage
                 if completion_result.usage:
@@ -259,10 +263,24 @@ class Agent:
             provider, allow_env=True, interactive=False,
         )
 
+        def registry_dirs(plural_name: str, singular_name: str) -> List[Path]:
+            dirs = getattr(self.registry, plural_name, None)
+            if dirs is not None:
+                try:
+                    resolved = list(dirs)
+                    if resolved:
+                        return resolved
+                except TypeError:
+                    pass
+            single = getattr(self.registry, singular_name, None)
+            return [single] if single is not None else []
+
         sub_registry = ToolRegistry(
-            prompts_dir=str(self.registry.prompts_dir),
-            flows_dir=str(self.registry.flows_dir),
-            tools_dir=str(self.registry.tools_dir),
+            prompts_dirs=registry_dirs("prompts_dirs", "prompts_dir"),
+            flows_dirs=registry_dirs("flows_dirs", "flows_dir"),
+            tools_dirs=registry_dirs("tools_dirs", "tools_dir"),
+            teams_dirs=registry_dirs("teams_dirs", "teams_dir"),
+            agents_dirs=registry_dirs("agents_dirs", "agents_dir"),
         )
 
         agent = Agent(

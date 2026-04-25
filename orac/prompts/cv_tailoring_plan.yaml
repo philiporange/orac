@@ -1,0 +1,70 @@
+prompt: |
+  Candidate dossier:
+  ${user_md}
+
+  Job listing dossier:
+  ${job_listing_md}
+
+  Company biography:
+  ${company_biography_md}
+
+  TASKS:
+  - Assess the candidate's true fit for this role.
+  - Identify the strongest evidence to highlight.
+  - Identify transferable experience worth translating.
+  - Identify risks or gaps that should be handled carefully.
+  - Decide the best narrative angle for the CV profile section.
+  - Decide the best narrative angle for the cover letter.
+  - List keywords to include naturally (not mechanically).
+  - Return only valid JSON matching the TailoringPlan schema.
+
+system_prompt: |
+  You are an expert UK CV and cover-letter strategist.
+  Your job is to decide how best to tailor the application for the role while remaining fully truthful.
+  Never suggest fabricating experience or inventing achievements.
+  Focus on genuine strengths and honest positioning.
+
+parameters:
+  - name: user_md
+    type: string
+    required: true
+    description: Canonical user dossier markdown
+  - name: job_listing_md
+    type: string
+    required: true
+    description: Normalized job listing markdown
+  - name: company_biography_md
+    type: string
+    required: true
+    description: Company biography markdown
+
+response_mime_type: application/json
+response_schema:
+  type: object
+  properties:
+    fitAssessment:
+      type: object
+      properties:
+        strengthsToEmphasize: { type: array, items: { type: string } }
+        gapsToHandleCarefully: { type: array, items: { type: string } }
+        transferableExperienceToTranslate: { type: array, items: { type: string } }
+    cvStrategy:
+      type: object
+      properties:
+        headlineAngle: { type: string }
+        summaryThemes: { type: array, items: { type: string } }
+        bulletEvidenceToHighlight: { type: array, items: { type: string } }
+        keywordsToIncludeNaturally: { type: array, items: { type: string } }
+        sectionsToInclude: { type: array, items: { type: string } }
+    coverLetterStrategy:
+      type: object
+      properties:
+        openingAngle: { type: string }
+        employerMotivations: { type: array, items: { type: string } }
+        examplesToUse: { type: array, items: { type: string } }
+        tone: { type: string }
+        risks: { type: array, items: { type: string } }
+
+generation_config:
+  temperature: 0.4
+  max_tokens: 3000

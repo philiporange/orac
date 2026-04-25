@@ -24,9 +24,10 @@ setup(
     python_requires=">=3.9",
     packages=find_packages(),
     include_package_data=True,
-    package_data={"orac": ["prompts/*.yaml", "config.yaml"]},
+    package_data={"orac": ["prompts/*.yaml", "skills/*.yaml", "config.yaml"]},
     install_requires=[
         "google-generativeai>=0.3.0,<1",
+        "google-genai>=1.0.0",
         "openai>=1.23.0",
         "PyYAML>=6.0",
         "python-dotenv>=1.0.0",

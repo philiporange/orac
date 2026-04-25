@@ -58,6 +58,7 @@ class Provider(str, Enum):
     AZURE = "azure"
     OPENROUTER = "openrouter"
     ZAI = "z.ai"
+    DEEPSEEK = "deepseek"
     CLI = "cli"
     CUSTOM = "custom"
 
@@ -87,6 +88,10 @@ _PROVIDER_DEFAULTS: dict[Provider, dict[str, str]] = {
     Provider.ZAI: {
         "base_url": "https://api.z.ai/api/coding/paas/v4",
         "key_env": "ZAI_API_KEY",
+    },
+    Provider.DEEPSEEK: {
+        "base_url": "https://api.deepseek.com/v1/",
+        "key_env": "DEEPSEEK_API_KEY",
     },
     Provider.CLI: {
         "base_url": "http://10.0.0.10:8317/v1/",
@@ -121,6 +126,8 @@ class Config:
         "system_prompt",
         "response_mime_type",
         "response_schema",
+        "thinking",
+        "reasoning_effort",
     }
 
     SUPPORTED_TYPES: Final[dict[str, type]] = {

@@ -82,7 +82,10 @@ def _inject_response_format(gen_cfg: Dict[str, Any]) -> Dict[str, Any]:
     if schema is not None:
         cfg["response_format"] = {
             "type": "json_schema",
-            "json_schema": {"schema": schema},
+            "json_schema": {
+                "name": "response",
+                "schema": schema
+            },
         }
     elif mime == "application/json":
         cfg["response_format"] = {"type": "json_object"}
@@ -368,6 +371,15 @@ class Prompt:
         if self.yaml_api_key is not None and not isinstance(self.yaml_api_key, str):
             raise ValueError("'api_key' must be a string when provided.")
 
+        # reasoning / thinking knobs (translated per-provider in openai_client)
+        self.yaml_thinking = data.get("thinking")
+        if self.yaml_thinking is not None and not isinstance(self.yaml_thinking, bool):
+            raise ValueError("'thinking' must be a boolean when provided.")
+
+        self.yaml_reasoning_effort = data.get("reasoning_effort")
+        if self.yaml_reasoning_effort is not None and not isinstance(self.yaml_reasoning_effort, str):
+            raise ValueError("'reasoning_effort' must be a string when provided.")
+
         # validate parameters
         for param in self.parameters_spec:
             if not isinstance(param, dict) or "name" not in param:
@@ -518,6 +530,8 @@ class Prompt:
         generation_config: Optional[Dict[str, Any]] = None,
         file_urls: Optional[List[str]] = None,
         provider: Optional[str | Provider] = None,
+        thinking: Optional[bool] = None,
+        reasoning_effort: Optional[str] = None,
         include_usage: bool = False,
         **kwargs_params,
     ) -> str | CompletionResult:
@@ -579,6 +593,14 @@ class Prompt:
             extra_cfg = deepcopy(generation_config) or {}
             merged_cfg = _merge_generation_config(base_cfg, extra_cfg)
             call_kwargs["generation_config"] = _inject_response_format(merged_cfg)
+
+            # Reasoning / thinking knobs: runtime overrides YAML
+            effective_thinking = thinking if thinking is not None else self.yaml_thinking
+            effective_effort = reasoning_effort if reasoning_effort is not None else self.yaml_reasoning_effort
+            if effective_thinking is not None:
+                call_kwargs["thinking"] = effective_thinking
+            if effective_effort is not None:
+                call_kwargs["reasoning_effort"] = effective_effort
 
             # Build message history - with conversation support
             api_history: List[Dict[str, Any]] = list(message_history or [])
@@ -733,6 +755,8 @@ class Prompt:
         generation_config: Optional[Dict[str, Any]] = None,
         file_urls: Optional[List[str]] = None,
         provider: Optional[str | Provider] = None,
+        thinking: Optional[bool] = None,
+        reasoning_effort: Optional[str] = None,
         include_usage: bool = False,
         **kwargs_params,
     ) -> dict | CompletionResult:
@@ -749,6 +773,8 @@ class Prompt:
             generation_config=generation_config,
             file_urls=file_urls,
             provider=provider,
+            thinking=thinking,
+            reasoning_effort=reasoning_effort,
             include_usage=True,
             **kwargs_params,
         )
@@ -767,6 +793,8 @@ class Prompt:
         generation_config: Optional[Dict[str, Any]] = None,
         file_urls: Optional[List[str]] = None,
         provider: Optional[str | Provider] = None,
+        thinking: Optional[bool] = None,
+        reasoning_effort: Optional[str] = None,
         force_json: bool = False,
         include_usage: bool = False,
         **kwargs_params,
@@ -794,6 +822,8 @@ class Prompt:
             generation_config=generation_config,
             file_urls=file_urls,
             provider=provider,
+            thinking=thinking,
+            reasoning_effort=reasoning_effort,
             include_usage=True,
             **kwargs_params,
         )

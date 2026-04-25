@@ -1,0 +1,34 @@
+prompt: |
+  Company name: ${company_name}
+
+  Sources:
+  ${sources}
+
+  TASKS:
+  - Summarize what the company does.
+  - Extract products/services, sector, customer/market signals, culture/value signals, and recent signals.
+  - Distinguish explicit evidence from reasonable inference.
+  - Identify unknowns.
+  - Produce Markdown suitable for company_biography.md.
+  - Do not flatter or speculate.
+  - If information is sparse, say so explicitly.
+
+system_prompt: |
+  You are a cautious company researcher.
+  Write a concise but useful company biography for job-application tailoring.
+  Only state what is supported by the supplied material.
+  Distinguish facts from inference. Label anything uncertain.
+
+parameters:
+  - name: company_name
+    type: string
+    required: true
+    description: Name of the company to research
+  - name: sources
+    type: string
+    required: true
+    description: Collected source material about the company
+
+generation_config:
+  temperature: 0.3
+  max_tokens: 3000

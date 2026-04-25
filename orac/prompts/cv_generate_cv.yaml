@@ -1,0 +1,88 @@
+prompt: |
+  Candidate dossier:
+  ${user_md}
+
+  Job listing dossier:
+  ${job_listing_md}
+
+  Company biography:
+  ${company_biography_md}
+
+  Tailoring plan:
+  ${tailoring_plan}
+
+  TASKS:
+  - Write a tailored UK CV in structured JSON format.
+  - Emphasise evidence directly relevant to the role.
+  - Use reverse chronological experience.
+  - Translate transferable experience honestly.
+  - Keep bullets specific and efficient.
+  - Include keywords naturally, not mechanically.
+  - Omit weak or irrelevant details unless strategically useful.
+  - Write in British English.
+  - Do not include a photo, DOB, or marital status.
+  - Target 1-2 pages of content.
+  - The profile section should be a concise 3-4 sentence summary.
+  - Employment bullets should start with action verbs.
+
+system_prompt: |
+  You are an expert UK CV writer.
+  You write concise, truthful, tailored CV content for UK applications.
+  You must not invent achievements or credentials.
+  You must write in British English.
+  You must optimise for both human readability and ATS compatibility.
+  You must use evidence from the candidate dossier and job dossier only.
+
+parameters:
+  - name: user_md
+    type: string
+    required: true
+  - name: job_listing_md
+    type: string
+    required: true
+  - name: company_biography_md
+    type: string
+    required: true
+  - name: tailoring_plan
+    type: string
+    required: true
+
+response_mime_type: application/json
+response_schema:
+  type: object
+  properties:
+    personalDetails:
+      type: object
+      properties:
+        fullName: { type: string }
+        address: { type: string }
+        phone: { type: string }
+        email: { type: string }
+        linkedinUrl: { type: string }
+        portfolioUrl: { type: string }
+    profile: { type: string }
+    employment:
+      type: array
+      items:
+        type: object
+        properties:
+          title: { type: string }
+          employer: { type: string }
+          location: { type: string }
+          dates: { type: string }
+          bullets: { type: array, items: { type: string } }
+    education:
+      type: array
+      items:
+        type: object
+        properties:
+          line: { type: string }
+          dates: { type: string }
+    certifications: { type: array, items: { type: string } }
+    keySkills: { type: array, items: { type: string } }
+    languages: { type: array, items: { type: string } }
+    rightToWork: { type: string }
+
+generation_config:
+  temperature: 0.4
+  max_tokens: 4000

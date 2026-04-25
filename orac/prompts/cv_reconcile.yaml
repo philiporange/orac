@@ -1,0 +1,35 @@
+prompt: |
+  Original profile:
+  ${profile_json}
+
+  Follow-up answers from the user:
+  ${answers}
+
+  TASKS:
+  - Update fields only when supported by the new answers.
+  - Resolve conflicts where possible.
+  - Keep unresolved ambiguity visible.
+  - Upgrade confidence levels where answers confirm existing data.
+  - Return the updated profile JSON plus an unresolved_issues array.
+
+system_prompt: |
+  You are reconciling candidate data after follow-up answers.
+  Your goal is to update the profile conservatively and accurately.
+  Do not invent information beyond what the user has stated.
+  Preserve the existing structure exactly, only modifying fields where the answers provide new or clarifying data.
+
+parameters:
+  - name: profile_json
+    type: string
+    required: true
+    description: Current structured candidate profile JSON
+  - name: answers
+    type: string
+    required: true
+    description: User's answers to follow-up questions
+
+response_mime_type: application/json
+
+generation_config:
+  temperature: 0.2
+  max_tokens: 4000

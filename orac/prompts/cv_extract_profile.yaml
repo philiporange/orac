@@ -1,0 +1,97 @@
+prompt: |
+  Here is the user's raw career information:
+
+  ${raw_dump}
+
+  TASKS:
+  1. Extract the candidate's basics (name, email, phone, address, links), employment history, education, certifications, skills, preferences, interests, and working style.
+  2. Preserve factual wording where precision matters.
+  3. Separate responsibilities from achievements.
+  4. Do not create numeric achievements unless explicitly present in the source.
+  5. Attach confidence labels to every field: "confirmed", "user_stated", "inferred", or "uncertain".
+  6. Mark anything needing confirmation with "needsConfirmation": true.
+  7. If a fact is missing, leave the field null. Do not invent.
+  8. If a fact is implied but not explicit, mark it "inferred".
+
+system_prompt: |
+  You are a meticulous career data normalizer.
+  Your job is to extract a structured candidate profile from messy user-provided material.
+  Accuracy is more important than completeness.
+  Do not invent or smooth over missing facts.
+  If a fact is missing, leave it blank.
+  If a fact is implied but not explicit, mark it inferred.
+  Return only valid JSON matching the provided schema.
+
+parameters:
+  - name: raw_dump
+    type: string
+    required: true
+    description: Raw career information dump from the user
+
+response_mime_type: application/json
+response_schema:
+  type: object
+  properties:
+    basics:
+      type: object
+      properties:
+        fullName: { type: object, properties: { value: { type: string }, confidence: { type: string }, needsConfirmation: { type: boolean } } }
+        email: { type: object, properties: { value: { type: string }, confidence: { type: string }, needsConfirmation: { type: boolean } } }
+        phone: { type: object, properties: { value: { type: string }, confidence: { type: string }, needsConfirmation: { type: boolean } } }
+        address: { type: object, properties: { value: { type: string }, confidence: { type: string }, needsConfirmation: { type: boolean } } }
+        linkedinUrl: { type: object, properties: { value: { type: string }, confidence: { type: string }, needsConfirmation: { type: boolean } } }
+        portfolioUrl: { type: object, properties: { value: { type: string }, confidence: { type: string }, needsConfirmation: { type: boolean } } }
+        rightToWork: { type: object, properties: { value: { type: string }, confidence: { type: string }, needsConfirmation: { type: boolean } } }
+    employment:
+      type: array
+      items:
+        type: object
+        properties:
+          employer: { type: object, properties: { value: { type: string }, confidence: { type: string } } }
+          title: { type: object, properties: { value: { type: string }, confidence: { type: string } } }
+          location: { type: object, properties: { value: { type: string }, confidence: { type: string } } }
+          startDate: { type: object, properties: { value: { type: string }, confidence: { type: string } } }
+          endDate: { type: object, properties: { value: { type: string }, confidence: { type: string } } }
+          isCurrent: { type: object, properties: { value: { type: boolean }, confidence: { type: string } } }
+          responsibilities: { type: object, properties: { value: { type: array, items: { type: string } }, confidence: { type: string } } }
+          achievements: { type: object, properties: { value: { type: array, items: { type: string } }, confidence: { type: string } } }
+          tools: { type: object, properties: { value: { type: array, items: { type: string } }, confidence: { type: string } } }
+    education:
+      type: array
+      items:
+        type: object
+        properties:
+          institution: { type: object, properties: { value: { type: string }, confidence: { type: string } } }
+          qualification: { type: object, properties: { value: { type: string }, confidence: { type: string } } }
+          subject: { type: object, properties: { value: { type: string }, confidence: { type: string } } }
+          startDate: { type: object, properties: { value: { type: string }, confidence: { type: string } } }
+          endDate: { type: object, properties: { value: { type: string }, confidence: { type: string } } }
+    certifications:
+      type: array
+      items:
+        type: object
+        properties:
+          name: { type: object, properties: { value: { type: string }, confidence: { type: string } } }
+          issuer: { type: object, properties: { value: { type: string }, confidence: { type: string } } }
+    skills:
+      type: object
+      properties:
+        hard: { type: object, properties: { value: { type: array, items: { type: string } }, confidence: { type: string } } }
+        soft: { type: object, properties: { value: { type: array, items: { type: string } }, confidence: { type: string } } }
+        tools: { type: object, properties: { value: { type: array, items: { type: string } }, confidence: { type: string } } }
+    summaryInputs:
+      type: object
+      properties:
+        professionalIdentity: { type: object, properties: { value: { type: array, items: { type: string } }, confidence: { type: string } } }
+        strengths: { type: object, properties: { value: { type: array, items: { type: string } }, confidence: { type: string } } }
+        motivations: { type: object, properties: { value: { type: array, items: { type: string } }, confidence: { type: string } } }
+    preferences:
+      type: object
+      properties:
+        targetRoles: { type: object, properties: { value: { type: array, items: { type: string } }, confidence: { type: string } } }
+        locations: { type: object, properties: { value: { type: array, items: { type: string } }, confidence: { type: string } } }
+        remotePreference: { type: object, properties: { value: { type: string }, confidence: { type: string } } }
+
+generation_config:
+  temperature: 0.2
+  max_tokens: 4000

@@ -143,6 +143,8 @@ class Client:
         model_name: Optional[str] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         file_paths: Optional[List[str]] = None,
+        thinking: Optional[bool] = None,
+        reasoning_effort: Optional[str] = None,
         include_usage: bool = False,
     ) -> Union[str, CompletionResult]:
         """Make completion request.
@@ -176,6 +178,8 @@ class Client:
             model_name=model_name,
             generation_config=generation_config,
             file_paths=file_paths,
+            thinking=thinking,
+            reasoning_effort=reasoning_effort,
         ))
         return result if include_usage else result.text
 
@@ -188,6 +192,8 @@ class Client:
         model_name: Optional[str] = None,
         generation_config: Optional[Dict[str, Any]] = None,
         file_paths: Optional[List[str]] = None,
+        thinking: Optional[bool] = None,
+        reasoning_effort: Optional[str] = None,
         include_usage: bool = False,
     ) -> Union[str, CompletionResult]:
         """Make chat request with message history.
@@ -218,9 +224,11 @@ class Client:
             model_name=model_name,
             generation_config=generation_config,
             file_paths=file_paths,
+            thinking=thinking,
+            reasoning_effort=reasoning_effort,
         ))
         return result if include_usage else result.text
-    
+
     def get_client_status(self) -> Dict[str, Any]:
         """Get comprehensive client status.
         
