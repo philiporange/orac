@@ -97,10 +97,11 @@ class AgentCommand(ResourceCommand, ListableMixin):
         input_values = dyn_parser.collect_param_values(agent_args, params_spec)
         dyn_parser.check_required_params(input_values, params_spec)
 
-        # Setup Provider
+        # Setup Provider (CLI flags override the agent YAML)
         provider_str = args.provider or spec.provider or "openrouter"
         provider = Provider(provider_str)
-        api_key = args.api_key
+        api_key = args.api_key or spec.api_key
+        base_url = getattr(args, "base_url", None) or spec.base_url
 
         try:
             registry = ToolRegistry()
@@ -109,6 +110,7 @@ class AgentCommand(ResourceCommand, ListableMixin):
             provider_registry.add_provider(
                 provider,
                 api_key=api_key,
+                base_url=base_url,
                 allow_env=True,
                 interactive=True,
             )

@@ -15,6 +15,7 @@ from orac.agent import Agent, AgentSpec, load_agent_spec
 from orac.registry import ToolRegistry, RegisteredTool
 from orac.config import Provider
 from orac.providers import ProviderRegistry
+from orac.openai_client import CompletionResult
 
 
 @dataclass
@@ -36,7 +37,8 @@ class Team:
                  agents_dir: str = None):
         self.spec = team_spec
         self.registry = registry
-        self.agents_dir = Path(agents_dir or "orac/agents")
+        from orac.config import Config
+        self.agents_dir = Path(agents_dir) if agents_dir else Config.get_agents_dir()
 
         # Load agent specifications
         self.leader_spec = self._load_agent_spec(self.spec.leader)
@@ -90,8 +92,12 @@ class Team:
 
         return team_registry
 
-    def run(self, **kwargs) -> str:
-        """Execute the team to accomplish a goal."""
+    def run(self, include_usage: bool = False, **kwargs):
+        """Execute the team to accomplish a goal.
+
+        When ``include_usage=True``, returns a ``CompletionResult`` whose
+        ``usage`` aggregates leader-and-subagent token counts and cost.
+        """
         # Create leader agent with team capabilities
         leader_agent = TeamLeaderAgent(
             agent_spec=self.leader_spec,
@@ -100,8 +106,15 @@ class Team:
             constitution=self.spec.constitution,
             agents_dir=self.agents_dir
         )
+        self._leader_agent = leader_agent
 
-        return leader_agent.run(**kwargs)
+        return leader_agent.run(include_usage=include_usage, **kwargs)
+
+    @property
+    def total_usage(self):
+        """Aggregate usage from the most recent ``run()`` invocation."""
+        leader = getattr(self, "_leader_agent", None)
+        return leader.total_usage if leader else None
 
 
 class TeamLeaderAgent(Agent):
@@ -119,6 +132,8 @@ class TeamLeaderAgent(Agent):
         
         leader_provider_registry.add_provider(
             provider,
+            api_key=agent_spec.api_key,
+            base_url=agent_spec.base_url,
             allow_env=True,
             interactive=False
         )
@@ -127,6 +142,11 @@ class TeamLeaderAgent(Agent):
         self.team_members = team_members or {}
         self.constitution = constitution
         self.agents_dir = agents_dir
+
+    def _build_system_prompt(self, **kwargs) -> str:
+        """Expose the team constitution to the leader's prompt template."""
+        kwargs.setdefault("constitution", self.constitution or "")
+        return super()._build_system_prompt(**kwargs)
 
     def _execute_tool(self, tool_name: str, tool_inputs: Dict[str, Any]) -> str:
         """Override to handle team delegation."""
@@ -160,6 +180,8 @@ class TeamLeaderAgent(Agent):
         
         agent_provider_registry.add_provider(
             provider,
+            api_key=agent_spec.api_key,
+            base_url=agent_spec.base_url,
             allow_env=True,
             interactive=False  # Non-interactive for delegation
         )
@@ -173,7 +195,8 @@ class TeamLeaderAgent(Agent):
 
         # Execute with task and inputs
         all_inputs = {"task": task, **inputs}
-        return agent.run(**all_inputs)
+        result = agent.run(include_usage=True, **all_inputs)
+        return self._absorb_subagent_result(result)
 
     def _execute_agent(self, agent_name: str, inputs: Dict[str, Any]) -> str:
         """Execute a specific agent with given inputs."""
@@ -191,6 +214,8 @@ class TeamLeaderAgent(Agent):
         
         agent_provider_registry.add_provider(
             provider,
+            api_key=agent_spec.api_key,
+            base_url=agent_spec.base_url,
             allow_env=True,
             interactive=False  # Non-interactive for delegation
         )
@@ -202,7 +227,8 @@ class TeamLeaderAgent(Agent):
             provider=provider
         )
 
-        return agent.run(**inputs)
+        result = agent.run(include_usage=True, **inputs)
+        return self._absorb_subagent_result(result)
 
 
 def load_team_spec(team_path: Path) -> TeamSpec:
@@ -240,7 +266,7 @@ def list_teams(teams_dir: str) -> List[Dict[str, Any]]:
     if not teams_path.exists():
         return teams
 
-    for yaml_file in list(teams_path.glob("*.yaml")) + list(teams_path.glob("*.yml")):
+    for yaml_file in teams_path.glob("*.yaml"):
         try:
             spec = load_team_spec(yaml_file)
             teams.append({

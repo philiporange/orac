@@ -151,6 +151,22 @@ class TestAgent(unittest.TestCase):
         found_tools = [name for name in tools.keys() if "dummy_prompt" in name or "finish" in name]
         assert len(found_tools) >= 1
 
+    def test_agent_normalizes_unprefixed_tool_names(self):
+        """Unprefixed LLM tool names should resolve to registered Orac tool keys."""
+        from orac.providers import ProviderRegistry
+
+        agent = Agent(
+            self.agent_spec,
+            self.registry,
+            ProviderRegistry(self.auth_manager),
+            Provider.GOOGLE,
+        )
+
+        assert agent._normalize_tool_name("finish") == "tool:finish"
+        assert agent._normalize_tool_name("dummy_prompt") == "prompt:dummy_prompt"
+        assert agent._normalize_tool_name("tool:finish") == "tool:finish"
+        assert agent._normalize_tool_name("missing_tool") == "missing_tool"
+
 
 class TestAgentWithNewAuth:
     """Tests that work with the new authentication system."""

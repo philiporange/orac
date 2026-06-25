@@ -17,9 +17,9 @@ def load_prompt_spec(prompts_dir: str, prompt_name: str) -> dict:
 
     *prompt_name* can be either:
       • a bare name (searched in *prompts_dir*), or
-      • a direct path to a *.yaml / *.yml* file.
+      • a direct path to a *.yaml* file.
     """
-    if prompt_name.endswith((".yaml", ".yml")) and os.path.isfile(prompt_name):
+    if prompt_name.endswith(".yaml") and os.path.isfile(prompt_name):
         path = prompt_name
     else:
         path = os.path.join(prompts_dir, f"{prompt_name}.yaml")

@@ -10,6 +10,8 @@ The coding agent is prompted to:
 3. Return structured JSON results
 """
 
+from __future__ import annotations
+
 import json
 import re
 from typing import Dict, Any, List

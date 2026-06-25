@@ -12,6 +12,8 @@ Supported agents:
 - goose: Block Goose CLI
 """
 
+from __future__ import annotations
+
 import subprocess
 import tempfile
 import os

@@ -158,7 +158,7 @@ class ResourceCommand(ABC):
         if not resource_dir.exists():
             return []
 
-        yaml_files = list(resource_dir.glob("*.yaml")) + list(resource_dir.glob("*.yml"))
+        yaml_files = resource_dir.glob("*.yaml")
         return sorted([f.stem for f in yaml_files])
 
     def check_resource_exists(
@@ -182,18 +182,13 @@ class ResourceCommand(ABC):
             SystemExit: If resource not found
         """
         # Check for direct path
-        if name.endswith((".yaml", ".yml")) and Path(name).is_file():
+        if name.endswith(".yaml") and Path(name).is_file():
             return Path(name)
 
         # Check in resource directory
         path = resource_dir / f"{name}.yaml"
         if path.exists():
             return path
-
-        # Also try .yml extension
-        path_yml = resource_dir / f"{name}.yml"
-        if path_yml.exists():
-            return path_yml
 
         # Resource not found - show helpful error
         available = self.list_available(resource_dir)

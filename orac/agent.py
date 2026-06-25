@@ -21,13 +21,15 @@ Agents can specify custom API configuration in their YAML:
 Note: Command-line flags and programmatic parameters override YAML values.
 """
 
+from __future__ import annotations
+
 import re
 import yaml
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Callable, Literal, Optional, Union
 from string import Template
 
 from .config import Config, Provider
@@ -39,6 +41,35 @@ from .flow import Flow, load_flow
 from .skill import Skill, load_skill
 from .compaction import maybe_compact
 from .logger import logger
+
+AgentEventType = Literal[
+    "iteration_start",
+    "model_action",
+    "tool_start",
+    "tool_finish",
+    "invalid_action",
+    "finish",
+    "max_iterations",
+]
+
+
+@dataclass
+class AgentEvent:
+    """Structured event emitted by Agent.run / Agent.continue_with.
+
+    Attached via the optional `event_callback` argument on Agent. Used by
+    debugging tools and external harnesses (e.g. the orac_improver project)
+    to observe ReAct iterations, tool calls, and termination conditions
+    without tailing stdout.
+    """
+    type: AgentEventType
+    timestamp: datetime
+    iteration: Optional[int] = None
+    payload: Dict[str, Any] = field(default_factory=dict)
+
+
+AgentEventCallback = Callable[[AgentEvent], None]
+
 
 @dataclass
 class AgentSpec:
@@ -61,14 +92,41 @@ class AgentSpec:
     compact_time_gap_seconds: int = 300
 
 class Agent:
-    def __init__(self, agent_spec: AgentSpec, tool_registry: ToolRegistry, provider_registry: ProviderRegistry, provider: Optional[Provider] = None):
+    def __init__(
+        self,
+        agent_spec: AgentSpec,
+        tool_registry: ToolRegistry,
+        provider_registry: ProviderRegistry,
+        provider: Optional[Provider] = None,
+        event_callback: Optional[AgentEventCallback] = None,
+    ):
         self.spec = agent_spec
         self.registry = tool_registry
         self.provider_registry = provider_registry
         self.provider = provider
+        self.event_callback = event_callback
         self.message_history: List[Dict[str, str]] = []
         self.total_usage: Optional[Usage] = None
         self.last_message_time: Optional[datetime] = None
+        self._system_prompt: Optional[str] = None
+
+    def _emit(
+        self,
+        type_: AgentEventType,
+        iteration: Optional[int] = None,
+        **payload: Any,
+    ) -> None:
+        if not self.event_callback:
+            return
+        try:
+            self.event_callback(AgentEvent(
+                type=type_,
+                timestamp=datetime.now(),
+                iteration=iteration,
+                payload=payload,
+            ))
+        except Exception as e:
+            logger.warning(f"Agent event callback raised: {e}")
 
     def _append_message(self, role: str, text: str, pinned: bool = False):
         """Append a message to history and update the last-message timestamp."""
@@ -87,62 +145,65 @@ class Agent:
             stripped = match.group(1).strip()
         return json.loads(stripped)
 
-    def run(self, include_usage: bool = False, **kwargs) -> str | CompletionResult:
-        """Executes the agent's ReAct loop to achieve its goal."""
-        
-        # 1. Format the initial system prompt with inputs and tool list
+    def _normalize_tool_name(self, tool_name: str) -> str:
+        """Resolve unprefixed tool names when they match one registered tool."""
+        if not tool_name or ":" in tool_name:
+            return tool_name
+
+        candidates = [
+            registered_name
+            for registered_name in self.registry.tools
+            if registered_name.rsplit(":", 1)[-1] == tool_name
+        ]
+        if len(candidates) == 1:
+            return candidates[0]
+
+        preferred_tool = f"tool:{tool_name}"
+        if preferred_tool in self.registry.tools:
+            return preferred_tool
+
+        return tool_name
+
+    def _build_system_prompt(self, **kwargs) -> str:
+        """Render the system prompt template with tool list and input vars."""
         tool_specs = self.registry.get_tools_spec(self.spec.tools)
-        
-        # Build template vars: kwargs override defaults
         template_vars = {"tool_list": tool_specs, "history": ""}
         template_vars.update(kwargs)
-        initial_prompt_template = Template(self.spec.system_prompt)
-        system_prompt = initial_prompt_template.safe_substitute(**template_vars)
-        
+        return Template(self.spec.system_prompt).safe_substitute(**template_vars)
+
+    def run(self, include_usage: bool = False, **kwargs) -> str | CompletionResult:
+        """Executes the agent's ReAct loop to achieve its goal."""
+
+        self._system_prompt = self._build_system_prompt(**kwargs)
+
         # Add an initial user message to start the conversation with the provided parameters
         input_summary = ", ".join([f"{k}={v}" for k, v in kwargs.items()])
         self._append_message('user', f"Please help me with the following inputs: {input_summary}")
-        
-        # If base_url or api_key is specified in spec, log configuration
-        if (self.spec.base_url or self.spec.api_key) and self.provider:
-            provider_info = self.provider_registry.get_provider_info(self.provider)
-            if self.spec.base_url and (not provider_info or provider_info.get('base_url') != self.spec.base_url):
-                logger.info(f"Agent will use custom base_url: {self.spec.base_url}")
-            if self.spec.api_key:
-                logger.info(f"Agent will use custom api_key from YAML")
 
+        return self._run_loop(self._system_prompt, include_usage=include_usage)
+
+    def continue_with(self, user_message: str, include_usage: bool = False) -> str | CompletionResult:
+        """Append a user message to existing history and resume the ReAct loop.
+
+        Used by chat/dialogue harnesses (e.g. orac_improver) to drive an agent
+        turn-by-turn after an initial run(). Reuses the system prompt that was
+        rendered on the first run().
+        """
+        if self._system_prompt is None:
+            raise RuntimeError(
+                "continue_with() requires run() to have been called first to "
+                "establish the system prompt."
+            )
+        self._append_message('user', user_message)
+        return self._run_loop(self._system_prompt, include_usage=include_usage)
+
+    def _run_loop(self, system_prompt: str, include_usage: bool) -> str | CompletionResult:
+        """The ReAct iteration loop. Runs until tool:finish or max_iterations."""
         for i in range(self.spec.max_iterations):
             print(f"\n--- Iteration {i+1}/{self.spec.max_iterations} ---")
+            self._emit("iteration_start", iteration=i + 1)
 
-            # Update provider with custom base_url/api_key if specified
-            if (self.spec.base_url or self.spec.api_key) and self.provider and i == 0:
-                # Only update on first iteration to avoid redundant updates
-                provider_info = self.provider_registry.get_provider_info(self.provider)
-                needs_update = (
-                    not provider_info or
-                    (self.spec.base_url and provider_info.get('base_url') != self.spec.base_url)
-                )
-                if needs_update or self.spec.api_key:
-                    try:
-                        # Get existing client config to extract API key
-                        from .client import Client
-                        # Note: We need access to the Client to update provider, but we only have provider_registry
-                        # For now, we'll log a warning - full support requires passing Client to Agent
-                        custom_items = []
-                        if self.spec.base_url:
-                            custom_items.append(f"base_url ({self.spec.base_url})")
-                        if self.spec.api_key:
-                            custom_items.append("api_key")
-
-                        logger.warning(
-                            f"Custom {' and '.join(custom_items)} specified in agent YAML but "
-                            f"provider update from agent is not yet fully supported. "
-                            f"Please configure these when initializing the client."
-                        )
-                    except Exception as e:
-                        logger.warning(f"Could not update provider configuration: {e}")
-
-            # 2. Compact history if needed (before sending to LLM)
+            # 1. Compact history if needed (before sending to LLM)
             maybe_compact(
                 message_history=self.message_history,
                 provider_registry=self.provider_registry,
@@ -154,7 +215,7 @@ class Agent:
                 compact_time_gap_seconds=self.spec.compact_time_gap_seconds,
             )
 
-            # 3. Query the LLM for the next action
+            # 2. Query the LLM for the next action
             try:
                 # Convert response_mime_type to response_format for OpenAI compatibility
                 processed_config = _inject_response_format(self.spec.generation_config)
@@ -179,41 +240,49 @@ class Agent:
                 action_data = self._extract_json(response_str)
             except Exception as e:
                 print(f"ERROR: Failed to get valid action from LLM: {e}")
+                self._emit("invalid_action", iteration=i + 1, error=str(e))
                 self._append_message('user', f"Observation: Invalid action response. Error: {e}")
                 continue
-            
+
             thought = action_data.get("thought", "No thought provided.")
-            tool_name = action_data.get("tool")
+            raw_tool_name = action_data.get("tool")
+            tool_name = self._normalize_tool_name(raw_tool_name)
             tool_inputs = action_data.get("inputs", {})
             pin_observation = action_data.get("pin", False)
 
             print(f"🤔 Thought: {thought}")
+            self._emit("model_action", iteration=i + 1, action=action_data)
             self._append_message('model', json.dumps(action_data, indent=2))
 
             if not tool_name:
                 print("ERROR: LLM did not provide a tool name.")
+                self._emit("invalid_action", iteration=i + 1, error="no tool name")
                 self._append_message('user', "Observation: No tool was selected. You must select a tool.")
                 continue
 
-            # 4. Handle the 'finish' action
+            # 3. Handle the 'finish' action
             if tool_name == "tool:finish":
                 final_answer = tool_inputs.get("result", "Agent finished without a final answer.")
                 print(f"✅ Agent Finished: {final_answer}")
+                self._emit("finish", iteration=i + 1, result=final_answer)
                 if include_usage:
                     return CompletionResult(text=final_answer, usage=self.total_usage)
                 return final_answer
-            
-            # 5. Execute the chosen tool
+
+            # 4. Execute the chosen tool
             print(f"🎬 Action: {tool_name} with inputs: {tool_inputs}")
+            self._emit("tool_start", iteration=i + 1, tool=tool_name, inputs=tool_inputs)
             observation = self._execute_tool(tool_name, tool_inputs)
-            
-            # 6. Add observation to history and repeat
+            self._emit("tool_finish", iteration=i + 1, tool=tool_name, observation=str(observation))
+
+            # 5. Add observation to history and repeat
             print(f"👀 Observation: {observation}")
             self._append_message('user', f"Observation: {str(observation)}",
                                  pinned=bool(pin_observation))
-            
+
         final_message = "Agent stopped: Maximum iterations reached."
         print(final_message)
+        self._emit("max_iterations", iteration=self.spec.max_iterations)
         if include_usage:
             return CompletionResult(text=final_message, usage=self.total_usage)
         return final_message
@@ -238,7 +307,7 @@ class Agent:
                 return prompt_instance.completion(**tool_inputs)
             elif tool.type == "flow":
                 flow_spec = load_flow(tool.file_path)
-                flow_engine = Flow(flow_spec)
+                flow_engine = Flow(flow_spec, provider=self.provider)
                 return flow_engine.execute(tool_inputs)
             elif tool.type == "tool":
                 skill_spec = load_skill(tool.file_path)
@@ -259,8 +328,14 @@ class Agent:
         agent_provider_registry = ProviderRegistry()
         provider_str = agent_spec.provider or (self.provider.value if self.provider else "google")
         provider = Provider(provider_str)
+        # Honor custom api_key/base_url from the agent YAML; fall back to the
+        # environment key when no direct key is given.
         agent_provider_registry.add_provider(
-            provider, allow_env=True, interactive=False,
+            provider,
+            api_key=agent_spec.api_key,
+            base_url=agent_spec.base_url,
+            allow_env=True,
+            interactive=False,
         )
 
         def registry_dirs(plural_name: str, singular_name: str) -> List[Path]:
@@ -289,7 +364,20 @@ class Agent:
             provider_registry=agent_provider_registry,
             provider=provider,
         )
-        return agent.run(**inputs)
+        result = agent.run(include_usage=True, **inputs)
+        return self._absorb_subagent_result(result)
+
+    def _absorb_subagent_result(self, result: Any) -> str:
+        """Fold a subagent's usage into our running total and return its text."""
+        if isinstance(result, CompletionResult):
+            if result.usage is not None:
+                self.total_usage = (
+                    (self.total_usage + result.usage)
+                    if self.total_usage
+                    else result.usage
+                )
+            return result.text
+        return result
 
 def find_agent(name: str) -> Optional[Path]:
     """Find an agent by name, searching all agent directories.

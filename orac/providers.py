@@ -88,8 +88,8 @@ class ProviderRegistry:
         else:
             resolved_base_url = base_url
         
-        # Get model name
-        resolved_model_name = model_name or Config.get_default_model_name()
+        # Get model name (falls back to the provider's own default model)
+        resolved_model_name = model_name or Config.get_default_model_for(provider)
         
         # Create client config
         config = ClientConfig(

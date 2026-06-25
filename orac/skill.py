@@ -210,12 +210,13 @@ import json
 import importlib.util
 
 # Load the skill module directly by file path
-skill_path = '{self.skills_dir / f"{self.spec.name}.py"}'
+skill_path = {str(self.skills_dir / f"{self.spec.name}.py")!r}
 spec = importlib.util.spec_from_file_location('skill_module', skill_path)
 skill_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(skill_module)
 
-inputs = json.loads('{json.dumps(inputs)}')
+# Inputs arrive as JSON on stdin to avoid quoting/injection issues
+inputs = json.load(sys.stdin)
 result = skill_module.execute(inputs)
 print(json.dumps(result))
 """)
@@ -226,6 +227,7 @@ print(json.dumps(result))
             timeout = self.spec.security.get('timeout', 30)
             result = subprocess.run(
                 [sys.executable, script_path],
+                input=json.dumps(inputs),
                 capture_output=True,
                 text=True,
                 timeout=timeout,

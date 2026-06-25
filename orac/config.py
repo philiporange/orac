@@ -63,43 +63,57 @@ class Provider(str, Enum):
     CUSTOM = "custom"
 
 
-# Hard-coded defaults for known providers
+# Hard-coded defaults for known providers. "default_model" is used when a
+# provider is registered without an explicit model so that e.g. ANTHROPIC
+# doesn't end up requesting a Gemini model.
 _PROVIDER_DEFAULTS: dict[Provider, dict[str, str]] = {
     Provider.OPENAI: {
         "base_url": "https://api.openai.com/v1/",
         "key_env": "OPENAI_API_KEY",
+        "default_model": "gpt-5.4-mini",
     },
     Provider.GOOGLE: {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "key_env": "GOOGLE_API_KEY",
+        "default_model": "gemini-3-flash-preview",
     },
     Provider.ANTHROPIC: {
         "base_url": "https://api.anthropic.com/v1/",
         "key_env": "ANTHROPIC_API_KEY",
+        "default_model": "claude-sonnet-4-6",
     },
     Provider.AZURE: {
         "base_url": "",  # Will be read from AZURE_OPENAI_BASE when needed
         "key_env": "AZURE_OPENAI_KEY",
+        # No default_model: Azure models are deployment-specific.
     },
     Provider.OPENROUTER: {
         "base_url": "https://openrouter.ai/api/v1/",
         "key_env": "OPENROUTER_API_KEY",
+        "default_model": "google/gemini-2.5-flash",
     },
     Provider.ZAI: {
         "base_url": "https://api.z.ai/api/coding/paas/v4",
         "key_env": "ZAI_API_KEY",
+        "default_model": "glm-4.6",
     },
     Provider.DEEPSEEK: {
         "base_url": "https://api.deepseek.com/v1/",
         "key_env": "DEEPSEEK_API_KEY",
+        "default_model": "deepseek-chat",
     },
     Provider.CLI: {
         "base_url": "http://10.0.0.10:8317/v1/",
         "key_env": "CLI_API_KEY",
+        # No default_model: local proxy models vary.
     }
 }
 
 # Provider selection moved to methods to avoid import-time env access
+
+# Process-wide cache for the auto-created download temp dir (see
+# Config.get_download_dir).
+_DOWNLOAD_DIR_CACHE: Optional[Path] = None
 
 
 class Config:
@@ -170,6 +184,22 @@ class Config:
     def get_default_model_name(cls) -> str:
         """Get default model name from environment or use default."""
         return os.getenv("ORAC_DEFAULT_MODEL_NAME", cls._DEFAULT_MODEL_NAME)
+
+    @classmethod
+    def get_default_model_for(cls, provider: "Provider | None") -> str:
+        """Get the default model for a provider.
+
+        Precedence: ORAC_DEFAULT_MODEL_NAME env var, the provider's
+        hard-coded default model, then the global default.
+        """
+        env_model = os.getenv("ORAC_DEFAULT_MODEL_NAME")
+        if env_model:
+            return env_model
+        if provider is not None:
+            provider_default = _PROVIDER_DEFAULTS.get(provider, {}).get("default_model")
+            if provider_default:
+                return provider_default
+        return cls._DEFAULT_MODEL_NAME
     
     @classmethod
     def get_log_file_path(cls) -> Path:
@@ -178,8 +208,18 @@ class Config:
     
     @classmethod
     def get_download_dir(cls) -> Path:
-        """Get download directory from environment or create temp dir."""
-        return Path(os.getenv("ORAC_DOWNLOAD_DIR", tempfile.mkdtemp(prefix=cls._DOWNLOAD_DIR_PREFIX)))
+        """Get download directory from environment or create temp dir.
+
+        The temp dir is created once per process so repeated calls share the
+        same directory and downloaded-file caching works.
+        """
+        env_dir = os.getenv("ORAC_DOWNLOAD_DIR")
+        if env_dir:
+            return Path(env_dir)
+        global _DOWNLOAD_DIR_CACHE
+        if _DOWNLOAD_DIR_CACHE is None:
+            _DOWNLOAD_DIR_CACHE = Path(tempfile.mkdtemp(prefix=cls._DOWNLOAD_DIR_PREFIX))
+        return _DOWNLOAD_DIR_CACHE
     
     # User config directory
     _USER_CONFIG_DIR: Final[Path] = Path.home() / ".config" / "orac"
@@ -309,7 +349,7 @@ class Config:
 
         Args:
             name: Resource name (without .yaml extension)
-            resource_type: One of 'prompts', 'flows', 'skills', 'agents'
+            resource_type: One of 'prompts', 'flows', 'skills', 'agents', 'teams'
             project_dir: Optional project directory to search
 
         Returns:
@@ -320,16 +360,16 @@ class Config:
             'flows': cls.get_flows_dirs,
             'skills': cls.get_skills_dirs,
             'agents': cls.get_agents_dirs,
+            'teams': cls.get_teams_dirs,
         }.get(resource_type)
 
         if not dirs_method:
             return None
 
         for directory in dirs_method(project_dir):
-            for ext in ['.yaml', '.yml']:
-                path = directory / f"{name}{ext}"
-                if path.exists():
-                    return path
+            path = directory / f"{name}.yaml"
+            if path.exists():
+                return path
         return None
 
     @classmethod

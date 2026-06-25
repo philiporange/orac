@@ -229,7 +229,7 @@ async def list_prompts():
     for prompts_dir in Config.get_prompts_dirs():
         if not prompts_dir.exists():
             continue
-        for yaml_file in list(prompts_dir.glob("*.yaml")) + list(prompts_dir.glob("*.yml")):
+        for yaml_file in prompts_dir.glob("*.yaml"):
             name = yaml_file.stem
             if name in seen:
                 continue
@@ -282,13 +282,13 @@ async def run_prompt(name: str, request: PromptRunRequest):
     try:
         prompt = Prompt(name)
 
-        # Apply overrides
-        if request.provider:
-            prompt.provider = request.provider
-        if request.model_name:
-            prompt.model_name = request.model_name
-
-        result = prompt.completion(**request.parameters)
+        # Runtime overrides are passed to completion(), which resolves them
+        # against the YAML config.
+        result = prompt.completion(
+            provider=request.provider,
+            model_name=request.model_name,
+            **request.parameters,
+        )
         return RunResult(success=True, result=result)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Prompt '{name}' not found")
@@ -336,7 +336,7 @@ async def get_flow(name: str):
             name=spec.name,
             description=spec.description or "",
             inputs=[{"name": i.name, "type": i.type, "required": i.required, "default": i.default, "description": i.description} for i in spec.inputs],
-            steps=[s.name for s in spec.steps]
+            steps=list(spec.steps.keys())
         )
     except HTTPException:
         raise
@@ -439,7 +439,7 @@ async def list_agents_endpoint():
     for agents_dir in Config.get_agents_dirs():
         if not agents_dir.exists():
             continue
-        for yaml_file in list(agents_dir.glob("*.yaml")) + list(agents_dir.glob("*.yml")):
+        for yaml_file in agents_dir.glob("*.yaml"):
             name = yaml_file.stem
             if name in seen:
                 continue
@@ -494,14 +494,14 @@ async def run_agent(name: str, request: AgentRunRequest):
         if not client:
             return RunResult(success=False, error="No providers configured. Run 'orac auth init' first.")
 
-        provider = Provider(request.provider) if request.provider else client.default_provider
+        provider = Provider(request.provider) if request.provider else client.get_default_provider()
         registry = ToolRegistry(
             prompts_dir=str(Config.get_prompts_dir()),
             flows_dir=str(Config.get_flows_dir()),
             skills_dir=str(Config.get_skills_dir())
         )
 
-        agent = Agent(spec, registry, client.provider_registry, provider=provider)
+        agent = Agent(spec, registry, client.get_provider_registry(), provider=provider)
         result = agent.run(**request.inputs)
         return RunResult(success=True, result=result)
     except HTTPException:
@@ -587,38 +587,34 @@ async def chat(request: ChatRequest):
             history = []
             request.conversation_id = conv_id
 
-        # Build message history for the prompt
-        message_history = [{"role": m["role"], "text": m["content"]} for m in history]
+        # Build message history for the prompt (older databases may contain
+        # 'model' rows; the API layer only understands 'user'/'model')
+        message_history = [
+            {"role": "user" if m["role"] == "user" else "model", "text": m["content"]}
+            for m in history
+        ]
 
-        # Create a chat prompt instance
+        # Create a chat prompt instance. Conversation persistence is handled
+        # by this endpoint, so disable the prompt's own conversation mode.
         try:
-            chat_prompt = Prompt("chat")
+            chat_prompt = Prompt("chat", use_conversation=False)
         except FileNotFoundError:
-            # If no chat prompt exists, use a simple inline prompt
-            chat_prompt = Prompt.__new__(Prompt)
-            chat_prompt.system_prompt = "You are a helpful assistant."
-            chat_prompt.prompt_template = "${message}"
-            chat_prompt.parameters = [{"name": "message", "type": "string", "required": True}]
-            chat_prompt.model_name = request.model_name or Config.get_default_model_name()
-            chat_prompt.provider = request.provider or (Config.get_provider_from_env().value if Config.get_provider_from_env() else "google")
-            chat_prompt.generation_config = {"temperature": 0.7}
-            chat_prompt.use_conversation = False
+            raise HTTPException(
+                status_code=500,
+                detail="Built-in 'chat' prompt not found. Reinstall orac or add a 'chat' prompt to your prompts directory.",
+            )
 
-        # Override model and provider if specified
-        if request.model_name:
-            chat_prompt.model_name = request.model_name
-        if request.provider:
-            chat_prompt.provider = request.provider
-
-        # Get response
+        # Get response (model/provider overrides are resolved by completion())
         response = chat_prompt.completion(
             message_history=message_history,
+            model_name=request.model_name,
+            provider=request.provider,
             message=request.message
         )
 
         # Save messages
         db.add_message(request.conversation_id, "user", request.message)
-        db.add_message(request.conversation_id, "model", response)
+        db.add_message(request.conversation_id, "assistant", response)
 
         return {
             "success": True,

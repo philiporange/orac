@@ -53,10 +53,14 @@ def init(
     if providers:
         for provider, config in providers.items():
             client.add_provider(provider, interactive=interactive, **config)
+        # If the requested default wasn't among the configured providers,
+        # fall back to the first configured one instead of erroring.
+        if default_provider not in providers:
+            default_provider = next(iter(providers))
     else:
         # Default: try recommended provider with consent
         client.add_provider(default_provider, allow_env=True, interactive=interactive)
-    
+
     client.set_default_provider(default_provider)
     _global_client = client
     return client

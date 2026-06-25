@@ -145,8 +145,16 @@ class TestExecuteAgentTool:
             system_prompt="test",
             provider="google",
         )
+        from orac.openai_client import CompletionResult, Usage
+
+        sub_usage = Usage(
+            prompt_tokens=10, completion_tokens=5, total_tokens=15,
+            model="sub-model", cost=0.0001,
+        )
         mock_sub_agent = MagicMock()
-        mock_sub_agent.run.return_value = "sub-agent result"
+        mock_sub_agent.run.return_value = CompletionResult(
+            text="sub-agent result", usage=sub_usage,
+        )
         MockAgent.return_value = mock_sub_agent
 
         # Create the parent agent
@@ -164,6 +172,7 @@ class TestExecuteAgentTool:
         parent.provider_registry = MagicMock()
         parent.provider = MagicMock()
         parent.provider.value = "google"
+        parent.total_usage = None
 
         tool = RegisteredTool(
             name="sub",
@@ -174,4 +183,8 @@ class TestExecuteAgentTool:
 
         result = parent._execute_agent_tool(tool, {"query": "test"})
         assert result == "sub-agent result"
-        mock_sub_agent.run.assert_called_once_with(query="test")
+        mock_sub_agent.run.assert_called_once_with(include_usage=True, query="test")
+        # Sub-agent usage must roll up into the parent's total.
+        assert parent.total_usage is not None
+        assert parent.total_usage.prompt_tokens == 10
+        assert parent.total_usage.cost == pytest.approx(0.0001)

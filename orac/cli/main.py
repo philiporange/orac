@@ -405,7 +405,7 @@ def list_prompts_command(prompts_dir: str):
         print(f"Prompts directory not found: {prompts_dir}")
         return
     
-    yaml_files = list(prompts_path.glob('*.yaml')) + list(prompts_path.glob('*.yml'))
+    yaml_files = list(prompts_path.glob('*.yaml'))
     
     if not yaml_files:
         print(f"No prompts found in {prompts_dir}")
@@ -461,7 +461,7 @@ def search_command(keyword: str):
     # Search prompts
     prompts_path = Config.get_prompts_dir()
     if prompts_path.exists():
-        yaml_files = list(prompts_path.glob('*.yaml')) + list(prompts_path.glob('*.yml'))
+        yaml_files = list(prompts_path.glob('*.yaml'))
         
         matching_prompts = []
         for yaml_file in yaml_files:

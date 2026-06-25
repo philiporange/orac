@@ -268,7 +268,7 @@ class TestTeamIntegration:
         assert result == "Team task completed"
         mock_leader_class.assert_called_once()
         mock_leader_instance.run.assert_called_once_with(
-            topic="test topic", depth="comprehensive"
+            include_usage=False, topic="test topic", depth="comprehensive"
         )
 
 

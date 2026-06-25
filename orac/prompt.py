@@ -158,13 +158,14 @@ class Prompt:
         provider: Optional[str | Provider] = None,
         use_conversation: Optional[bool] = None,
         conversation_id: Optional[str] = None,
+        resume_conversation: bool = True,
         auto_save: bool = True,
         max_history: Optional[int] = None,
         progress_callback: Optional[ProgressCallback] = None,
     ):
         # Detect "direct file" mode (prompt_name points to a real .yaml file)
         pn_path = Path(prompt_name)
-        if pn_path.suffix.lower() in {".yaml", ".yml"}:
+        if pn_path.suffix.lower() == ".yaml":
             if not pn_path.is_file():
                 raise FileNotFoundError(f"Prompt YAML file not found: {pn_path}")
             self.yaml_file_path = str(pn_path.expanduser().resolve())
@@ -183,6 +184,7 @@ class Prompt:
         # Store conversation constructor params (will be processed after config loading)
         self._init_use_conversation = use_conversation
         self._init_conversation_id = conversation_id
+        self._resume_conversation = resume_conversation
         self._init_auto_save = auto_save
         self._init_max_history = max_history
 
@@ -496,19 +498,21 @@ class Prompt:
             self._conversation_db = ConversationDB(Config.get_conversation_db_path())
         
         if self.conversation_id is None:
-            # Try to reuse the most recent conversation for this prompt
-            conversations = self._conversation_db.list_conversations()
+            # Resume the most recent conversation for this prompt unless the
+            # caller opted out with resume_conversation=False.
             recent_conv = None
-            for conv in conversations:
-                if conv['prompt_name'] == self.prompt_name:
-                    recent_conv = conv
-                    break  # list_conversations() returns newest first
-            
+            if self._resume_conversation:
+                conversations = self._conversation_db.list_conversations()
+                for conv in conversations:
+                    if conv['prompt_name'] == self.prompt_name:
+                        recent_conv = conv
+                        break  # list_conversations() returns newest first
+
             if recent_conv:
                 self.conversation_id = recent_conv['id']
                 logger.debug(f"Reusing recent conversation: {self.conversation_id}")
             else:
-                # No existing conversation for this prompt, create new one
+                # No existing (or resumable) conversation, create a new one
                 self.conversation_id = self._conversation_db.create_conversation(
                     prompt_name=self.prompt_name
                 )
@@ -709,6 +713,7 @@ class Prompt:
             if completion_result.usage:
                 api_meta["usage"] = {
                     "prompt_tokens": completion_result.usage.prompt_tokens,
+                    "cached_tokens": completion_result.usage.cached_tokens,
                     "completion_tokens": completion_result.usage.completion_tokens,
                     "total_tokens": completion_result.usage.total_tokens,
                     "cost": completion_result.usage.cost,

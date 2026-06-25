@@ -672,7 +672,7 @@ result = prompt(topic="science fiction")
 
 ### Usage & Cost Tracking
 
-Orac can optionally report token usage and estimated cost for API calls. This is available at every level of the Python API: `Client`, `Prompt`, `Flow`, and `Agent`.
+Orac can optionally report token usage and estimated cost for API calls. This is available at every level of the Python API: `Client`, `Prompt`, `Flow`, `Agent`, and `Team`.
 
 Usage tracking is **opt-in** — pass `include_usage=True` to any completion method. When enabled, the method returns a `CompletionResult` object instead of a plain string.
 
@@ -686,12 +686,18 @@ from orac import CompletionResult, Usage
 #   .usage  — Usage object or None
 
 # Usage fields:
-#   .prompt_tokens      — input tokens
+#   .prompt_tokens      — input tokens (includes cached)
+#   .cached_tokens      — input tokens served from prompt cache (billed at cache rate)
 #   .completion_tokens  — output tokens
 #   .total_tokens       — total tokens
 #   .model              — model name used
 #   .cost               — estimated cost in USD (None if model not in pricing table)
 ```
+
+Cached prompt tokens are extracted automatically from the provider response
+(OpenAI's `prompt_tokens_details.cached_tokens`, Anthropic's
+`cache_read_input_tokens`, or the generic `cached_tokens` field used by some
+shims) and billed at the model's cache-hit rate when one is listed.
 
 #### Tracking Usage with Prompts
 
@@ -707,6 +713,7 @@ print(result)  # "Tokyo"
 result = prompt.completion(country="Japan", include_usage=True)
 print(result.text)                 # "Tokyo"
 print(result.usage.prompt_tokens)  # 12
+print(result.usage.cached_tokens)  # 0  (cache hits, when supported)
 print(result.usage.completion_tokens)  # 1
 print(result.usage.total_tokens)   # 13
 print(result.usage.model)          # "gemini-2.5-flash"
@@ -766,38 +773,81 @@ You can also access `engine.total_usage` directly after execution for the `Usage
 
 #### Tracking Usage with Agents
 
-Agents accumulate usage across all LLM iterations in their ReAct loop:
+Agents accumulate usage across all LLM iterations in their ReAct loop. Costs from
+**delegated sub-agents and agent-as-tool calls are folded into the parent's
+running total automatically**, so a single `total_usage` represents end-to-end
+spend for the whole run:
 
 ```python
 from orac import Agent
 
 result = agent.run(include_usage=True, topic="quantum computing")
 print(result.text)                 # final answer
-print(result.usage.total_tokens)   # total across all iterations
+print(result.usage.total_tokens)   # total across all iterations + sub-agents
 print(result.usage.cost)           # total cost
 ```
 
 The `agent.total_usage` attribute is also available after `run()` completes.
 
+#### Tracking Usage with Teams
+
+`Team.run()` also accepts `include_usage=True`. The leader agent's running
+total includes every delegation through `tool:delegate` and direct
+`agent:<name>` invocations, so team-level cost rolls up the entire crew:
+
+```python
+from orac.team import Team, load_team_spec
+
+team = Team(load_team_spec("teams/research.yaml"), registry)
+result = team.run(include_usage=True, topic="protein folding")
+print(result.text)
+print(result.usage.cost)            # sum of leader + every delegated agent
+print(team.total_usage.total_tokens)  # also accessible after run()
+```
+
 #### Built-in Model Pricing
 
-Orac includes a built-in pricing table (`orac.MODEL_PRICING`) for common models from OpenAI, Anthropic, and Google. Costs are calculated automatically when the model is recognized.
+Orac ships a built-in pricing table (`orac.MODEL_PRICING`) for the headline
+paid-tier models across every supported provider — OpenAI, Anthropic, Google,
+xAI, DeepSeek, and Z.AI (GLM). Costs are calculated automatically when the
+model is recognized. The snapshot covers cache-hit rates and active vendor
+discounts and is current as of `2026-05-06`.
+
+Pricing entries are `Pricing` dataclasses with `input`, `output`, and an
+optional `cached_input` rate. Each rate is a `TokenRate` that supports
+context-tier pricing (e.g. Gemini 2.5 Pro's `>200k` long-context surcharge,
+GPT-5.4's short/long context tiers).
 
 ```python
 import orac
+from orac.openai_client import Pricing, TokenRate, _flat, _tiered
 
-# View supported models
-for model, prices in orac.MODEL_PRICING.items():
-    print(f"{model}: ${prices['input']*1e6:.2f}/M input, ${prices['output']*1e6:.2f}/M output")
+# Inspect built-in pricing
+for name, pricing in orac.MODEL_PRICING.items():
+    print(f"{name}: ${pricing.input.rate*1e6:.3f}/M input, "
+          f"${pricing.output.rate*1e6:.3f}/M output")
 
-# Add custom pricing
-orac.MODEL_PRICING["my-custom-model"] = {
-    "input": 1.00e-6,   # $1.00 per million input tokens
-    "output": 2.00e-6,  # $2.00 per million output tokens
-}
+# Add a custom flat-rate model
+orac.MODEL_PRICING["my-custom-model"] = Pricing(
+    input=_flat(1.0),         # $1.00 per million input tokens
+    output=_flat(2.0),        # $2.00 per million output tokens
+    cached_input=_flat(0.1),  # $0.10 per million cached prompt tokens
+)
+
+# Or a tiered model with a 200k long-context cutoff
+orac.MODEL_PRICING["my-tiered-model"] = Pricing(
+    input=_tiered(2.0, 4.0),
+    output=_tiered(12.0, 18.0),
+    cached_input=_tiered(0.2, 0.4),
+)
 ```
 
-Versioned model names are matched by prefix (e.g. `gpt-4o-2024-08-06` matches `gpt-4o`). If a model is not in the pricing table, `usage.cost` will be `None` but token counts are still reported.
+**Name matching:** lookups are case-insensitive, strip OpenRouter-style vendor
+prefixes (`anthropic/claude-opus-4-7` → `claude-opus-4-7`) and route suffixes
+(`:beta`, `:thinking`, `:free`), then fall back to longest-prefix matching for
+versioned aliases (`gpt-5.4-2026-01-01` → `gpt-5.4`). If a model is not in the
+pricing table, `usage.cost` will be `None` but token counts are still
+reported.
 
 #### Accumulating Usage Across Multiple Calls
 

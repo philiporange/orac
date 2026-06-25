@@ -79,10 +79,12 @@ class Flow:
 
     def __init__(self, flow_spec: FlowSpec, prompts_dir: str = "prompts",
                  skills_dir: str = "skills",
+                 provider: Optional[Any] = None,
                  progress_callback: Optional[ProgressCallback] = None):
         self.spec = flow_spec
         self.prompts_dir = prompts_dir
         self.skills_dir = skills_dir
+        self.provider = provider
         self.progress_callback = progress_callback
         self.results: Dict[str, Dict[str, Any]] = {}
         self.total_usage: Optional[Usage] = None
@@ -203,6 +205,7 @@ class Flow:
             if step.prompt_name:
                 # Execute a prompt step (always capture usage internally)
                 prompt = Prompt(step.prompt_name, prompts_dir=self.prompts_dir,
+                               provider=self.provider,
                                progress_callback=self.progress_callback)
                 completion_result = prompt(include_usage=True, **resolved_inputs)
 
@@ -331,6 +334,7 @@ class Flow:
             if self.total_usage:
                 flow_complete_meta["usage"] = {
                     "prompt_tokens": self.total_usage.prompt_tokens,
+                    "cached_tokens": self.total_usage.cached_tokens,
                     "completion_tokens": self.total_usage.completion_tokens,
                     "total_tokens": self.total_usage.total_tokens,
                     "cost": self.total_usage.cost,
@@ -347,6 +351,7 @@ class Flow:
             if include_usage and self.total_usage:
                 final_outputs["_usage"] = {
                     "prompt_tokens": self.total_usage.prompt_tokens,
+                    "cached_tokens": self.total_usage.cached_tokens,
                     "completion_tokens": self.total_usage.completion_tokens,
                     "total_tokens": self.total_usage.total_tokens,
                     "model": self.total_usage.model,
@@ -370,15 +375,16 @@ class Flow:
             raise
 
     def _validate_inputs(self, inputs: Dict[str, Any]) -> None:
-        """Validate that required flow inputs are provided."""
+        """Validate required flow inputs and apply defaults for missing ones."""
         for flow_input in self.spec.inputs:
-            if flow_input.required and flow_input.name not in inputs:
-                if flow_input.default is not None:
-                    inputs[flow_input.name] = flow_input.default
-                else:
-                    raise FlowValidationError(
-                        f"Required input '{flow_input.name}' is missing"
-                    )
+            if flow_input.name in inputs:
+                continue
+            if flow_input.default is not None:
+                inputs[flow_input.name] = flow_input.default
+            elif flow_input.required:
+                raise FlowValidationError(
+                    f"Required input '{flow_input.name}' is missing"
+                )
 
 
 def find_flow(name: str) -> Optional[Path]:

@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import base64
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional, Any, Union
+from typing import List, Dict, Optional, Any, Tuple, Union
 from loguru import logger
 from openai import OpenAI
 
@@ -25,31 +25,140 @@ from .providers import ProviderRegistry
 # ---------------------------------------------------------------------#
 # Usage / cost tracking                                                #
 # ---------------------------------------------------------------------#
+#
+# Pricing snapshot: 2026-05-06 (USD).
+# Source: provider-supplied table folded into the project; covers paid-tier
+# headline rates including cache-hit rates and active vendor discounts.
+# Excludes batch / flex / priority surcharges and audio modalities.
+#
+# Rates are stored per-token. Helper constructors below convert from the
+# per-1M-tokens figures the providers publish.
+# ---------------------------------------------------------------------#
 
-# Per-token pricing (USD) for common models.  Keys are matched against
-# the *resolved* model name sent to the API.  Prices are per-token
-# (NOT per-1K tokens) so we can simply multiply.
+
+@dataclass(frozen=True)
+class TokenRate:
+    """Per-token USD rate, optionally tiered by prompt length.
+
+    Flat rates leave ``threshold`` and ``long_rate`` unset. Tiered rates
+    apply ``long_rate`` once ``prompt_tokens`` exceeds ``threshold``.
+    """
+
+    rate: float
+    threshold: Optional[int] = None
+    long_rate: Optional[float] = None
+
+    def for_prompt(self, prompt_tokens: int) -> float:
+        if (
+            self.threshold is not None
+            and self.long_rate is not None
+            and prompt_tokens > self.threshold
+        ):
+            return self.long_rate
+        return self.rate
+
+
+@dataclass(frozen=True)
+class Pricing:
+    """Per-token (USD) pricing for a model."""
+
+    input: TokenRate
+    output: TokenRate
+    cached_input: Optional[TokenRate] = None
+
+
+def _flat(per_million: float) -> TokenRate:
+    return TokenRate(rate=per_million * 1e-6)
+
+
+def _tiered(
+    short_per_million: float,
+    long_per_million: float,
+    threshold: int = 200_000,
+) -> TokenRate:
+    return TokenRate(
+        rate=short_per_million * 1e-6,
+        threshold=threshold,
+        long_rate=long_per_million * 1e-6,
+    )
+
+
 # fmt: off
-MODEL_PRICING: Dict[str, Dict[str, float]] = {
-    # OpenAI
-    "gpt-4o":             {"input": 2.50e-6, "output": 10.00e-6},
-    "gpt-4o-mini":        {"input": 0.15e-6, "output": 0.60e-6},
-    "gpt-4.1":            {"input": 2.00e-6, "output": 8.00e-6},
-    "gpt-4.1-mini":       {"input": 0.40e-6, "output": 1.60e-6},
-    "gpt-4.1-nano":       {"input": 0.10e-6, "output": 0.40e-6},
-    "o3":                 {"input": 2.00e-6, "output": 8.00e-6},
-    "o3-mini":            {"input": 1.10e-6, "output": 4.40e-6},
-    "o4-mini":            {"input": 1.10e-6, "output": 4.40e-6},
-    # Anthropic
-    "claude-sonnet-4-6":  {"input": 3.00e-6, "output": 15.00e-6},
-    "claude-opus-4-6":    {"input": 15.00e-6, "output": 75.00e-6},
-    "claude-haiku-4-5":   {"input": 0.80e-6, "output": 4.00e-6},
-    # Google
-    "gemini-2.5-pro":     {"input": 1.25e-6, "output": 10.00e-6},
-    "gemini-2.5-flash":   {"input": 0.15e-6, "output": 0.60e-6},
-    "gemini-2.0-flash":   {"input": 0.10e-6, "output": 0.40e-6},
+MODEL_PRICING: Dict[str, Pricing] = {
+    # ------------------------------------------------------------ OpenAI
+    "gpt-5.5":             Pricing(_tiered(5.0, 10.0),  _tiered(30.0, 45.0),  _tiered(0.5, 1.0)),
+    "gpt-5.5-pro":         Pricing(_tiered(30.0, 60.0), _tiered(180.0, 270.0)),
+    "gpt-5.4":             Pricing(_tiered(2.5, 5.0),   _tiered(15.0, 22.5),  _tiered(0.25, 0.5)),
+    "gpt-5.4-mini":        Pricing(_flat(0.75),         _flat(4.5),           _flat(0.075)),
+    "gpt-5.4-nano":        Pricing(_flat(0.2),          _flat(1.25),          _flat(0.02)),
+    "gpt-5.4-pro":         Pricing(_tiered(30.0, 60.0), _tiered(180.0, 270.0)),
+    "gpt-realtime-1.5":    Pricing(_flat(4.0),          _flat(16.0),          _flat(0.4)),
+    "gpt-realtime-mini":   Pricing(_flat(0.6),          _flat(2.4),           _flat(0.06)),
+
+    # ------------------------------------------------------------ Anthropic
+    "claude-opus-4-7":     Pricing(_flat(5.0),   _flat(25.0), _flat(0.5)),
+    "claude-opus-4-6":     Pricing(_flat(5.0),   _flat(25.0), _flat(0.5)),
+    "claude-opus-4-5":     Pricing(_flat(5.0),   _flat(25.0), _flat(0.5)),
+    "claude-opus-4-1":     Pricing(_flat(15.0),  _flat(75.0), _flat(1.5)),
+    "claude-opus-4":       Pricing(_flat(15.0),  _flat(75.0), _flat(1.5)),
+    "claude-sonnet-4-6":   Pricing(_flat(3.0),   _flat(15.0), _flat(0.3)),
+    "claude-sonnet-4-5":   Pricing(_flat(3.0),   _flat(15.0), _flat(0.3)),
+    "claude-sonnet-4":     Pricing(_flat(3.0),   _flat(15.0), _flat(0.3)),
+    "claude-haiku-4-5":    Pricing(_flat(1.0),   _flat(5.0),  _flat(0.1)),
+    "claude-haiku-3-5":    Pricing(_flat(0.8),   _flat(4.0),  _flat(0.08)),
+    "claude-haiku-3":      Pricing(_flat(0.25),  _flat(1.25), _flat(0.03)),
+
+    # ------------------------------------------------------------ Google
+    "gemini-3.1-pro-preview":         Pricing(_tiered(2.0, 4.0),    _tiered(12.0, 18.0), _tiered(0.2, 0.4)),
+    "gemini-3.1-flash-lite-preview":  Pricing(_flat(0.25),          _flat(1.5),          _flat(0.025)),
+    "gemini-3-flash-preview":         Pricing(_flat(0.5),           _flat(3.0),          _flat(0.05)),
+    "gemini-2.5-pro":                 Pricing(_tiered(1.25, 2.5),   _tiered(10.0, 15.0), _tiered(0.125, 0.25)),
+    "gemini-2.5-flash":               Pricing(_flat(0.3),           _flat(2.5),          _flat(0.03)),
+    "gemini-2.5-flash-lite":          Pricing(_flat(0.1),           _flat(0.4),          _flat(0.01)),
+
+    # ------------------------------------------------------------ xAI
+    "grok-4.3":                       Pricing(_flat(1.25), _flat(2.5), _flat(0.2)),
+    "grok-4.20-multi-agent-0309":     Pricing(_flat(1.25), _flat(2.5), _flat(0.2)),
+    "grok-4.20-0309-reasoning":       Pricing(_flat(1.25), _flat(2.5), _flat(0.2)),
+    "grok-4.20-0309-non-reasoning":   Pricing(_flat(1.25), _flat(2.5), _flat(0.2)),
+    "grok-4-1-fast-reasoning":        Pricing(_flat(0.2),  _flat(0.5), _flat(0.05)),
+    "grok-4-1-fast-non-reasoning":    Pricing(_flat(0.2),  _flat(0.5), _flat(0.05)),
+
+    # ------------------------------------------------------------ DeepSeek
+    "deepseek-v4-flash":   Pricing(_flat(0.14),  _flat(0.28), _flat(0.0028)),
+    "deepseek-v4-pro":     Pricing(_flat(0.435), _flat(0.87), _flat(0.003625)),
+
+    # ------------------------------------------------------------ Z.AI (GLM)
+    "glm-5.1":             Pricing(_flat(1.4), _flat(4.4), _flat(0.26)),
+    "glm-5":               Pricing(_flat(1.0), _flat(3.2), _flat(0.2)),
+    "glm-5-turbo":         Pricing(_flat(1.2), _flat(4.0), _flat(0.24)),
+    "glm-4.7":             Pricing(_flat(0.6), _flat(2.2), _flat(0.11)),
+    "glm-4.7-flashx":      Pricing(_flat(0.07), _flat(0.4), _flat(0.01)),
+    "glm-4.6":             Pricing(_flat(0.6), _flat(2.2), _flat(0.11)),
+    "glm-4.5":             Pricing(_flat(0.6), _flat(2.2), _flat(0.11)),
+    "glm-4.5-x":           Pricing(_flat(2.2), _flat(8.9), _flat(0.45)),
+    "glm-4.5-air":         Pricing(_flat(0.2), _flat(1.1), _flat(0.03)),
+    "glm-4.5-airx":        Pricing(_flat(1.1), _flat(4.5), _flat(0.22)),
 }
 # fmt: on
+
+
+_OPENROUTER_VENDOR_PREFIXES: Tuple[str, ...] = (
+    "anthropic/", "openai/", "google/", "deepseek/",
+    "z-ai/", "z.ai/", "zai/", "x-ai/", "xai/",
+)
+
+
+def _normalize_model_name(model_name: str) -> str:
+    """Normalize for pricing lookup: strip vendor prefix and route suffix."""
+    name = (model_name or "").strip().lower()
+    for prefix in _OPENROUTER_VENDOR_PREFIXES:
+        if name.startswith(prefix):
+            name = name[len(prefix):]
+            break
+    # Strip OpenRouter-style ":beta", ":thinking", ":free" suffixes.
+    name = name.split(":", 1)[0]
+    return name
 
 
 # ---------------------------------------------------------------------#
@@ -60,9 +169,10 @@ MODEL_PRICING: Dict[str, Dict[str, float]] = {
 _VALID_EFFORT_VALUES: set[str] = {"none", "minimal", "low", "medium", "high", "xhigh"}
 
 # Effort → Anthropic extended-thinking budget_tokens mapping.
+# Anthropic rejects budget_tokens below 1024, so that is the floor.
 _ANTHROPIC_EFFORT_BUDGETS: Dict[str, int] = {
     "none": 0,
-    "minimal": 512,
+    "minimal": 1024,
     "low": 1024,
     "medium": 4096,
     "high": 16000,
@@ -156,21 +266,45 @@ def _apply_reasoning_knobs(
         req.pop("extra_body", None)
 
 
-def _lookup_pricing(model_name: str) -> Optional[Dict[str, float]]:
+def _lookup_pricing(model_name: str) -> Optional[Pricing]:
     """Find pricing for *model_name*, trying prefix matches for versioned names."""
-    if model_name in MODEL_PRICING:
-        return MODEL_PRICING[model_name]
-    # Try prefix match (e.g. "gpt-4o-2024-08-06" → "gpt-4o")
+    name = _normalize_model_name(model_name)
+    if name in MODEL_PRICING:
+        return MODEL_PRICING[name]
+    # Try prefix match (e.g. "gpt-5.4-2026-01-01" → "gpt-5.4")
     for key in sorted(MODEL_PRICING, key=len, reverse=True):
-        if model_name.startswith(key):
+        if name.startswith(key):
             return MODEL_PRICING[key]
     return None
+
+
+def _compute_cost(
+    pricing: Pricing,
+    prompt_tokens: int,
+    cached_tokens: int,
+    completion_tokens: int,
+) -> float:
+    """Total USD cost given tokens and pricing.
+
+    Cached tokens are billed at the cache rate; the remaining prompt tokens
+    pay the standard input rate. If a model has no cache rate listed, all
+    prompt tokens are billed at the input rate.
+    """
+    cached_tokens = max(0, min(cached_tokens, prompt_tokens))
+    uncached = prompt_tokens - cached_tokens
+    cost = uncached * pricing.input.for_prompt(prompt_tokens)
+    if cached_tokens:
+        cache_rate = pricing.cached_input or pricing.input
+        cost += cached_tokens * cache_rate.for_prompt(prompt_tokens)
+    cost += completion_tokens * pricing.output.for_prompt(prompt_tokens)
+    return cost
 
 
 @dataclass
 class Usage:
     """Token usage and optional cost for a single API call."""
     prompt_tokens: int = 0
+    cached_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
     model: str = ""
@@ -187,6 +321,7 @@ class Usage:
             combined_cost = other.cost
         return Usage(
             prompt_tokens=self.prompt_tokens + other.prompt_tokens,
+            cached_tokens=self.cached_tokens + other.cached_tokens,
             completion_tokens=self.completion_tokens + other.completion_tokens,
             total_tokens=self.total_tokens + other.total_tokens,
             model=other.model or self.model,
@@ -379,20 +514,36 @@ def call_api(
         completion_tokens = getattr(ru, "completion_tokens", 0) or 0
         total_tokens = getattr(ru, "total_tokens", 0) or (prompt_tokens + completion_tokens)
 
+        # Cached prompt tokens may appear under different fields depending on
+        # the upstream provider (OpenAI: prompt_tokens_details.cached_tokens;
+        # Anthropic: cache_read_input_tokens; some shims: cached_tokens).
+        cached_tokens = 0
+        prompt_details = getattr(ru, "prompt_tokens_details", None)
+        if prompt_details is not None:
+            cached_tokens = getattr(prompt_details, "cached_tokens", 0) or 0
+        if not cached_tokens:
+            cached_tokens = (
+                getattr(ru, "cache_read_input_tokens", 0)
+                or getattr(ru, "cached_tokens", 0)
+                or 0
+            )
+
         cost: Optional[float] = None
         pricing = _lookup_pricing(resolved_model_name)
         if pricing:
-            cost = (prompt_tokens * pricing["input"]) + (completion_tokens * pricing["output"])
+            cost = _compute_cost(pricing, prompt_tokens, cached_tokens, completion_tokens)
 
         usage = Usage(
             prompt_tokens=prompt_tokens,
+            cached_tokens=cached_tokens,
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
             model=resolved_model_name,
             cost=cost,
         )
+        cache_note = f" (cached {cached_tokens})" if cached_tokens else ""
         logger.info(
-            f"LLM completion successful — {total_tokens} tokens"
+            f"LLM completion successful — {total_tokens} tokens{cache_note}"
             + (f" (${cost:.6f})" if cost is not None else "")
         )
     else:
